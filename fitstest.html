@@ -1,0 +1,98 @@
+<html>
+<head>
+
+
+<script src="fits.js" type="text/javascript" charset="utf-8"></script>
+<script src="wcs.js" type="text/javascript"></script>
+
+</head>
+
+<body>
+<script type="text/javascript">
+  var FITS = astro.FITS;
+
+  // Define a callback function for when the FITS file is received
+  var callback = function() {
+
+    // Get the first header-dataunit containing a dataunit
+    var hdu = this.getHDU(1);
+    console.log("hdu", hdu);
+
+    // Get the first header
+    var header = this.getHeader();
+    console.log("header", header);
+
+    // or we can do
+    //var header = hdu.header;
+
+    // Read a card from the header
+    var bitpix = header.get('BITPIX');
+
+    // Get the dataunit object
+    //var dataunit = hdu.data;
+
+    // or we can do
+    var image = this.getDataUnit();
+    //console.log(image.getFrame());
+    
+    //~ startTime = new Date();
+    //~ image.getFrame(0, function(arr) {
+      //~ endTime = new Date();
+      //~ console.log(endTime - startTime);
+      //~ console.log(arr.length);
+      //~ for (var i = 0; i < arr.length; i++) {
+        //~ var value = arr[i];
+        //~ if (value != 0) {
+          //~ console.log(i, value);
+          //~ break;
+        //~ }
+      //~ }
+    //~ });
+
+    
+    // Do some wicked client side processing ...
+    
+    //~ var headerString = String(header);
+    //~ console.log("headerString", headerString)
+    
+    var wcsheader = new Object();
+    wcsheader['SIMPLE'] = "T";
+    wcsheader['BITPIX'] = header.get('BITPIX');
+    wcsheader['NAXIS'] = header.get('NAXIS');
+    wcsheader['NAXIS1'] = header.get('NAXIS1');
+    wcsheader['NAXIS2'] = header.get('NAXIS2');
+    wcsheader['CTYPE1'] = header.get('CTYPE1');
+    wcsheader['CTYPE2'] = header.get('CTYPE2');
+    wcsheader['CRPIX1'] = header.get('CRPIX1');
+    wcsheader['CRPIX2'] = header.get('CRPIX2');
+    wcsheader['CRVAL1'] = header.get('CRVAL1');
+    wcsheader['CRVAL2'] = header.get('CRVAL2');
+    wcsheader['CDELT1'] = header.get('CDELT1');
+    wcsheader['CDELT2'] = header.get('CDELT2');
+
+    var w = new wcs();
+    w.init(wcsheader);
+    var world = w.pix2sky(100, 100);
+    console.log("world", world);
+    //var pixcrd = w.sky2pix(ra, dec);
+    
+    
+
+}
+
+  // Set path to FITS file
+  var url = "./f0011_rdeep.fits";
+
+  // Initialize a new FITS File object
+  var fits = new FITS(url, callback);
+  
+
+  // Alternatively, the FITS object may be initialized using the HTML File API.
+  //var fits = new FITS.File(fileObj, callback);
+  
+
+
+
+</script>
+</body>
+</html>
