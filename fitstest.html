@@ -1,97 +1,428 @@
 <html>
 <head>
 
+    <script src="./js/jquery-1.11.0.min.js"></script>
+    <script src="./js/fits.js" type="text/javascript" charset="utf-8"></script>
+    <script src="./js/wcs.js" type="text/javascript"></script>
+    <script src="./js/leaflet.js"></script>
+    <script src="./js/L.Control.MousePosition.js"></script>
+    <script src="./js/leaflet-sidebar.js"></script>
+    <script src="./js/papaparse.min.js"></script>
 
-<script src="fits.js" type="text/javascript" charset="utf-8"></script>
-<script src="wcs.js" type="text/javascript"></script>
+    
+    <link rel="stylesheet" href="./css/L.Control.MousePosition.css" />
+    <link rel="stylesheet" href="./css/leaflet.css" />
+    <link rel="stylesheet" href="./css/leaflet-sidebar.css" />
+    <link rel="stylesheet" href="./css/font-awesome.min.css">
+<!--
+    <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet">
+-->
+
+    <style type="text/css" media="screen">
+
+
+	    
+	    #map {
+            height: 100%;
+            background-color: #000000; 
+        }
+
+    </style>
 
 </head>
 
 <body>
-<script type="text/javascript">
-  var FITS = astro.FITS;
+    <div id="sidebar" class="sidebar collapsed">
+        <!-- Nav tabs -->
+        <div class="sidebar-tabs">
+            <ul role="tablist">
+                <li><a href="#home" role="tab"><i class="fa fa-search"></i></a></li>
+                <li><a href="#contrast" role="tab"><i class="fa fa-adjust"></i></a></li>
+                <li><a href="#import" role="tab"><i class="fa fa-upload"></i></a></li>
+            </ul>
 
-  // Define a callback function for when the FITS file is received
-  var callback = function() {
+            <ul role="tablist">
+                <li><a href="#settings" role="tab"><i class="fa fa-gear"></i></a></li>
+            </ul>
+        </div>
 
-    // Get the first header-dataunit containing a dataunit
-    var hdu = this.getHDU(1);
-    console.log("hdu", hdu);
+        <!-- Tab panes -->
+        <div class="sidebar-content">
+            <div class="sidebar-pane" id="home">
+                <h1 class="sidebar-header">
+                    Coordinate Search.
+                    <span class="sidebar-close"><i class="fa fa-caret-left"></i></span>
+                </h1>
+                <form class="navbar-form navbar-right" id="goto_map_coordinate_input_form">
+                    <input type="text" class="form-control" placeholder="RA, DEC" id="input_goto_map_coordinate">
+                    <button type="button" class="btn btn-default" id="button_goto_map_coordinate">Go!</button>
+                </form>
 
-    // Get the first header
-    var header = this.getHeader();
-    console.log("header", header);
+            </div>
 
-    // or we can do
-    //var header = hdu.header;
+            <div class="sidebar-pane" id="profile">
+                <h1 class="sidebar-header">Profile<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+            </div>
 
-    // Read a card from the header
-    var bitpix = header.get('BITPIX');
+            <div class="sidebar-pane" id="messages">
+                <h1 class="sidebar-header">Messages<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+            </div>
 
-    // Get the dataunit object
-    //var dataunit = hdu.data;
+            <div class="sidebar-pane" id="settings">
+                <h1 class="sidebar-header">Settings<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+            </div>
+        </div>
+    </div>
 
-    // or we can do
-    var image = this.getDataUnit();
-    //console.log(image.getFrame());
+    <div id="map"  class="sidebar-map"></div>
     
-    //~ startTime = new Date();
-    //~ image.getFrame(0, function(arr) {
-      //~ endTime = new Date();
-      //~ console.log(endTime - startTime);
-      //~ console.log(arr.length);
-      //~ for (var i = 0; i < arr.length; i++) {
-        //~ var value = arr[i];
-        //~ if (value != 0) {
-          //~ console.log(i, value);
-          //~ break;
-        //~ }
-      //~ }
+    
+<script type="text/javascript">
+
+$(function() {
+
+    //~ $( window ).load(function() {
+        //~ $( "#map" ).css( "height", "95%" );
+        //~ map.invalidateSize();
     //~ });
 
-    
-    // Do some wicked client side processing ...
-    
-    //~ var headerString = String(header);
-    //~ console.log("headerString", headerString)
-    
-    var wcsheader = new Object();
-    wcsheader['SIMPLE'] = "T";
-    wcsheader['BITPIX'] = header.get('BITPIX');
-    wcsheader['NAXIS'] = header.get('NAXIS');
-    wcsheader['NAXIS1'] = header.get('NAXIS1');
-    wcsheader['NAXIS2'] = header.get('NAXIS2');
-    wcsheader['CTYPE1'] = header.get('CTYPE1');
-    wcsheader['CTYPE2'] = header.get('CTYPE2');
-    wcsheader['CRPIX1'] = header.get('CRPIX1');
-    wcsheader['CRPIX2'] = header.get('CRPIX2');
-    wcsheader['CRVAL1'] = header.get('CRVAL1');
-    wcsheader['CRVAL2'] = header.get('CRVAL2');
-    wcsheader['CDELT1'] = header.get('CDELT1');
-    wcsheader['CDELT2'] = header.get('CDELT2');
+    //<global>
+    MAX_ZOOM = 13
+    MIN_ZOOM = 13
+    TILE_SIZE = 157
+    MIN_X = 0;
+    MIN_Y = MIN_X;
+    MAX_X = 28;
+    MAX_Y = MAX_X;
+    PAGE_TITLE = "Stripe 82 Deep Image Coadd Map";
+    BASE_DIRECTORY = "./";
+    HAS_NO_BACKGROUND = false;
+    $.ajax({
+	url: "./config" + ".json",
+	type: "GET",
+	dataType: "json",
+	async: false,
+	success: function(data) {
+	    if ( data.max_zoom) {
+		MAX_ZOOM = data.max_zoom
+	    }
+	    if ( data.min_zoom) {
+		MIN_ZOOM = data.min_zoom
+	    }
+	    if ( data.tile_size) {
+		TILE_SIZE = data.tile_size
+	    }
+	    if ( data.min_x) {
+		MIN_X = data.min_x
+	    }
+	    if ( data.max_x) {
+		MAX_X = data.max_x
+	    }
+	    if ( data.min_y) {
+		MIN_Y = data.min_y
+	    }
+	    if ( data.max_y) {
+		MAX_Y = data.max_y
+	    }
+	    if ( data.page_title) {
+		$("#pagetitle").text(data.page_title)
+	    }
+	    if ( data.base_directory) {
+		BASE_DIRECTORY = data.base_directory
+	    }
+	    if ( data.has_no_background) {
+		HAS_NO_BACKGROUND = data.has_no_background
+	    }
 
-    var w = new wcs();
-    w.init(wcsheader);
-    var world = w.pix2sky(100, 100);
-    console.log("world", world);
-    //var pixcrd = w.sky2pix(ra, dec);
+	},
+	error: function(status) {
+	    //console.log(status);
+	}
+    });
+    //</global>
+
+
+    // helper functions
+
+    function getQueryVariable(variable)
+    {
+           var query = window.location.search.substring(1);
+           var vars = query.split("&");
+           for (var i=0;i<vars.length;i++) {
+                   var pair = vars[i].split("=");
+                   if(pair[0] == variable){return pair[1];}
+           }
+           return(false);
+    }
     
+    function long2tile(lon,zoom) { 
+        coords = map.project(L.latLng(0,lon))
+	return (Math.floor(coords.x * Math.pow(2, MAX_ZOOM - zoom) / TILE_SIZE ) ); 
+    }
+    function lat2tile (lat,zoom) { 
+        coords = map.project(L.latLng(lat,0))
+	return (Math.floor(coords.y * Math.pow(2, MAX_ZOOM - zoom) / TILE_SIZE ) ); 
+    }
+    
+    function tile2long(x,zoom) {
+        return (map.unproject(L.point([x/Math.pow(2,(MAX_ZOOM - zoom))*TILE_SIZE, 0])).lng);
+    }
+    function tile2lat(y,zoom) {
+        return (map.unproject(L.point([0, y/Math.pow(2,(MAX_ZOOM - zoom))*TILE_SIZE])).lat);
+    }
+    //end helper functions
+
+
+    var FITS = astro.FITS;
+
+    var ra_dec_to_map_coordinates = function(ra, dec) {
+        // see http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
+        // published filenames have naming scheme fxxxy_rdeep.fits
+        // where xxx refers to the RA going from right to left
+        // RA goes from 310.5 ° to 
+        // and y refers to DEC going from top to bottom
+        // DEC goes from -1.25° to 1.25°
+        
+        
+        if ( dec < 1.25 && dec > -1.25) {
+            var y = Math.floor((dec + 1.25) / 0.5) + 1
+        }
+        else if (dec == 1.25) {
+            var y = 5
+        }
+	else if (dec == -1.25) {
+	    var y = 1
+	}
+        else {
+            var y = 1
+        }
+        
+        if (ra >= 310 && ra <= 360 ) {
+            var x = (50 - (360 - ra) ) // map the ra interval [310, 360] -> [0, 50]
+        }
+        else if (ra >= 0 && ra < 60) {
+            var x = (ra + 50) // map the ra interval [0,60] -> [50,110]
+        }
+        else if (ra == 60) {
+            var x = 109.5
+        }
+        else if (ra < 0 && ra >= -50) {
+            var x = (50 + ra) // if ra given as negative number, map ra interval [-50,0] to [0, 50]
+        }
+        else {
+            var x = 0
+        }
+        
+        x = Math.floor(x / 0.5) + 1
+        
+        // this returns the fits filename according to the naming scheme in 
+        // http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
     
 
-}
+        //~ y = "" + y // make y a string
+        //~ x = "" + x // make x a string
+        //~ // leftpad x with zeros
+        //~ console.log(y)
+        //~ var xxx = "000"
+        //~ console.log(xxx)
+        //~ xxx = xxx.substr(0, xxx.length - x.length) + x
+        //~ console.log(xxx)
+        //~ return xxx + y
+        
+        
+        // the following returns the upper left tile
+        // i.e x-y.fits filename in the slippymap
+        // from the fxxxy_rdeep.fits file which was
+        // the origin of the tiles
+        y = 29 * ( 5 - y)
+        x = (220 - x) * 29
+        return ( {"x":x,"y":y} )
+        
+    }
+
+    var pan_to_radec = function(args, {radec, tile}) {
+        var ra=radec[0]
+        var dec=radec[1]
+        var header = this.getHeader();
+        var wcsheader = new Object();
+        wcsheader['SIMPLE'] = "T";
+        wcsheader['BITPIX'] = header.get('BITPIX');
+        wcsheader['NAXIS'] = header.get('NAXIS');
+        wcsheader['NAXIS1'] = header.get('NAXIS1');
+        wcsheader['NAXIS2'] = header.get('NAXIS2');
+        wcsheader['CTYPE1'] = header.get('CTYPE1');
+        wcsheader['CTYPE2'] = header.get('CTYPE2');
+        wcsheader['CRPIX1'] = header.get('CRPIX1');
+        wcsheader['CRPIX2'] = header.get('CRPIX2');
+        wcsheader['CRVAL1'] = header.get('CRVAL1');
+        wcsheader['CRVAL2'] = header.get('CRVAL2');
+        wcsheader['CDELT1'] = header.get('CDELT1');
+        wcsheader['CDELT2'] = header.get('CDELT2');
+
+        var w = new wcs();
+        w.init(wcsheader);
+        var coordinates_pixel = w.sky2pix(ra, dec) 
+        var x = tile.x * TILE_SIZE + coordinates_pixel[0]
+        var y = tile.y * TILE_SIZE - coordinates_pixel[1] + header.get('NAXIS2'); // last term because y coordinate is inversed in fits-files
+	var go_to_latlng = map.unproject(L.point(x,y));
+	map.panTo(go_to_latlng);
+	L.marker(go_to_latlng).addTo(map);
+	
+	
+	
+    }
+
+  // Define a callback function for when the FITS file is received
+    var callback = function(args, canvas) {
+        var canvas_ctx = canvas.getContext('2d');
+   
+        
+        // Get the first header-dataunit containing a dataunit
+        var hdu = this.getHDU(1);
+
+        // Get the first header
+        var header = this.getHeader();
+
+        var xdim=header.get('NAXIS1');
+        var ydim=header.get('NAXIS2');
+
+        // Get the dataunit object
+        var dataunit = hdu.data;
+
+        // or we can do
+        var image = this.getDataUnit();
+        
+        //~ startTime = new Date();
+        image.getFrame(0, function(arr) {
+            //~ endTime = new Date();
+            //~ console.log(endTime - startTime);
+            //~ console.log(arr.length);
+            //var minmax = image.getExtent(arr);
+            var minmax = [-2, 8000]
+            //~ console.log("minmax", minmax)
+            var normalize = 1/(Math.log(minmax[1]-minmax[0]))
+            //~ console.log("normalize", normalize)
+            //~ for (var i = 0; i < arr.length; i++) {
+            //~ var value = arr[i];
+            //~ if (value != 0) {
+              //~ console.log(i, value);
+              //~ break;
+            //~ }
+            //~ }
+          
+            var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
+            for (var x = 0; x<xdim; x++) {
+                for (var y = 0; y<ydim; y++) {
+                    for (i = 0; i<3; i++) {
+                        image_data.data[x*4+y*(xdim*4) + i] =
+                            Math.log10((image.getPixel(arr, x, ydim-y-1)) - minmax[0]) * normalize * 255
+                        //alpha value
+                        image_data.data[x*4+y*(xdim*4) + 3] = 255
+                    }
+                }
+            }
+            canvas_ctx.putImageData(image_data, 0, 0);
+
+        });
+
+ 
+    }
+
+    var fits_layer = new L.GridLayer({
+        maxZoom: MAX_ZOOM,
+        minZoom: Math.max(MAX_ZOOM - 7, 0),
+        tileSize: TILE_SIZE,	
+        unloadInvisibleTiles: true,
+        noWrap: true,
+    });
+    fits_layer.createTile = function(tilePoint) {
+        var canvas = L.DomUtil.create('canvas', 'leaflet-tile');
+        canvas.width = TILE_SIZE;
+        canvas.height = TILE_SIZE;
+        if (tilePoint.x >= 0 && tilePoint.y >= 0 && tilePoint.x < 220 * 29 && tilePoint.y < 5 * 29 ) {
+            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +tilePoint.y + '/' + tilePoint.x + '-' + tilePoint.y +'.fits';
+            var fits = new FITS(fits_url, callback, canvas);
+        }
+        
+        
+       
+
+        return canvas;
+    };
 
   // Set path to FITS file
-  var url = "./f0011_rdeep.fits";
+//  var url = "./f0044_rdeep.fits";
 
   // Initialize a new FITS File object
-  var fits = new FITS(url, callback);
+//  var fits = new FITS(url, callback);
   
 
   // Alternatively, the FITS object may be initialized using the HTML File API.
   //var fits = new FITS.File(fileObj, callback);
-  
+
+    var map = new L.Map('map', {
+	    center: new L.latLng(10,10),
+	    minZoom: MIN_ZOOM,
+	    maxZoom: MAX_ZOOM,
+	    zoom: MAX_ZOOM,
+	    crs: L.CRS.Simple
+    });
+    
+    map.panTo( new L.latLng( tile2lat(29,map.getZoom()), tile2long(6379,map.getZoom()) ) );
 
 
+    var overlayLayers = new Object();
+	var baseLayers = {
+	    "fits layer": fits_layer
+	}
+    fits_layer.addTo(map);
+    var LayerControl = new L.control.layers(baseLayers, overlayLayers, {collapsed: true}).addTo(map);	
+
+
+
+    var mousePositionControl = new L.control.mousePosition({
+        lngFormatter: function(lng) {
+            return long2tile(lng, map.getZoom())
+        }, 
+        latFormatter: function(lat) {
+            return lat2tile(lat, map.getZoom())
+        }, 
+        lngFirst: true
+    });
+    mousePositionControl.addTo(map);
+    var sidebar = L.control.sidebar('sidebar').addTo(map);
+    
+    
+    var goto_map_coordinate = function(radec) {
+        if (radec.data.length == 0) {
+            console.log("do nothing");
+        }
+        else if(radec.data[0] && radec.data[0].length == 2) {
+            var ra = radec.data[0][0]
+            var dec = radec.data[0][1]
+            var tile = ra_dec_to_map_coordinates(ra, dec);
+            var fits_url = BASE_DIRECTORY +'/splitfits3/map/' + tile.y + '/' + tile.x + '-' + tile.y +'.fits';
+            var fits = new FITS(fits_url, pan_to_radec, {"radec": [ra, dec], "tile": tile});
+            
+            //~ map.panTo( new L.latLng( tile2lat(xy_array.data[0][1],map.getZoom()), tile2long(xy_array.data[0][0],map.getZoom()) ) );
+        }
+    }
+    
+    $("#button_goto_map_coordinate").click(function() {
+	goto_map_coordinate(Papa.parse( $( "#input_goto_map_coordinate" ).val(), {dynamicTyping: true}) );
+    });
+    $( "#goto_map_coordinate_input_form" ).keypress(function( event ) {
+	if ( event.which == 13 ) {
+	    goto_map_coordinate(Papa.parse( $( "#input_goto_map_coordinate" ).val(), {dynamicTyping: true}) );
+	
+	}
+    });
+    
+    if ( getQueryVariable('ra') && getQueryVariable('dec') ) {
+	goto_map_coordinate({"data": [[getQueryVariable('ra'), getQueryVariable('dec')]]});
+    }
+
+});
 
 </script>
 </body>
