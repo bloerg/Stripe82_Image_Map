@@ -39,7 +39,7 @@
         <div class="sidebar-tabs">
             <ul role="tablist">
                 <li><a href="#home" role="tab"><i class="fa fa-search"></i></a></li>
-                <li><a href="#contrast" role="tab"><i class="fa fa-adjust"></i></a></li>
+                <li><a href="#image_adjust" role="tab"><i class="fa fa-adjust"></i></a></li>
                 <li><a href="#import" role="tab"><i class="fa fa-upload"></i></a></li>
             </ul>
 
@@ -62,8 +62,9 @@
 
             </div>
 
-            <div class="sidebar-pane" id="profile">
-                <h1 class="sidebar-header">Profile<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+            <div class="sidebar-pane" id="image_adjust">
+                <h1 class="sidebar-header">Image Adjustment<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+		<p> Invert Colors <input id="checkbox_invert_color" type="checkbox" aria-label="checkbox for switching to inverted colors"> </p>
             </div>
 
             <div class="sidebar-pane" id="messages">
@@ -99,6 +100,7 @@ $(function() {
     PAGE_TITLE = "Stripe 82 Deep Image Coadd Map";
     BASE_DIRECTORY = "./";
     HAS_NO_BACKGROUND = false;
+    INVERT_COLORS = false
     $.ajax({
 	url: "./config" + ".json",
 	type: "GET",
@@ -211,7 +213,6 @@ $(function() {
 	       this is where the 29 comes from
 	    */
 	    if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile_y - tilePoint.y) > 29 ) {
-		console.log("resetting wcs")
 		this.wcsheader['SIMPLE'] = "T";
 		this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
 		this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
@@ -363,9 +364,15 @@ $(function() {
             var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
             for (var x = 0; x<xdim; x++) {
                 for (var y = 0; y<ydim; y++) {
+		    var color_value = Math.log10((image.getPixel(arr, x, ydim-y-1)) - minmax[0]) * normalize * 255
                     for (i = 0; i<3; i++) {
-                        image_data.data[x*4+y*(xdim*4) + i] =
-                            Math.log10((image.getPixel(arr, x, ydim-y-1)) - minmax[0]) * normalize * 255
+			if (INVERT_COLORS) {
+			    image_data.data[x*4+y*(xdim*4) + i] = 255 - color_value
+
+			}
+			else {
+			    image_data.data[x*4+y*(xdim*4) + i] = color_value
+			}
                         //alpha value
                         image_data.data[x*4+y*(xdim*4) + 3] = 255
                     }
@@ -631,9 +638,22 @@ $(function() {
 	}
     });
     
+    $("#checkbox_invert_color").click(function() {
+	INVERT_COLORS = ($("#checkbox_invert_color").prop('checked'))
+	if (map.hasLayer(fits_layer) ) {
+	    map.removeLayer(fits_layer)
+	    if (INVERT_COLORS == true) $("#map").css("background-color", "#ffffff")
+	    else $("#map").css("background-color", "#000000")
+
+	    map.addLayer(fits_layer)
+	}
+	
+    })
+    
     if ( getQueryVariable('ra') && getQueryVariable('dec') ) {
 	goto_map_coordinate({"data": [[getQueryVariable('ra'), getQueryVariable('dec')]]});
     }
+    
 
 });
 
