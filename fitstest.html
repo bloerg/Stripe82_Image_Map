@@ -5,6 +5,7 @@
     <script src="./js/fits.js" type="text/javascript" charset="utf-8"></script>
     <script src="./js/wcs.js" type="text/javascript"></script>
     <script src="./js/leaflet.js"></script>
+    <script src="./js/leaflet.draw.js"></script>
     <script src="./js/L.Control.MousePosition.js"></script>
     <script src="./js/leaflet-sidebar.js"></script>
     <script src="./js/papaparse.min.js"></script>
@@ -12,6 +13,7 @@
     
     <link rel="stylesheet" href="./css/L.Control.MousePosition.css" />
     <link rel="stylesheet" href="./css/leaflet.css" />
+    <link rel="stylesheet" href="./css/leaflet.draw.css" />
     <link rel="stylesheet" href="./css/leaflet-sidebar.css" />
     <link rel="stylesheet" href="./css/font-awesome.min.css">
 <!--
@@ -20,13 +22,13 @@
 
     <style type="text/css" media="screen">
 
-
-	    
-	    #map {
+	#map {
             height: 100%;
             background-color: #000000; 
         }
-
+	.leaflet-draw-tooltip {
+		display: none;
+	}
     </style>
 
 </head>
@@ -92,7 +94,7 @@ $(function() {
     TILE_SIZE = 157
     MIN_X = 0;
     MIN_Y = MIN_X;
-    MAX_X = 28;
+    MAX_X = 220 * 29 - 1;
     MAX_Y = MAX_X;
     PAGE_TITLE = "Stripe 82 Deep Image Coadd Map";
     BASE_DIRECTORY = "./";
@@ -170,20 +172,87 @@ $(function() {
     function tile2lat(y,zoom) {
         return (map.unproject(L.point([0, y/Math.pow(2,(MAX_ZOOM - zoom))*TILE_SIZE])).lat);
     }
+    
+    function binary_to_file(binary, filename) {
+
+	var blob = new Blob([binary], {type: "octet/stream"})
+	var uri = window.URL.createObjectURL(blob);
+
+	var link = document.createElement("a");    
+	link.href = uri;
+	
+	//set the visibility hidden so it will not effect on your web-layout
+	link.style = "visibility:hidden";
+	link.download = filename;
+	
+	//this part will append the anchor tag and remove it after automatic click
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+    }
+
     //end helper functions
 
 
     var FITS = astro.FITS;
+    
+    
+    /* this object is for the handling of coordinate transformation
+       between the pixels in the map and right ascension / declination
+    */
+    var map_coordinates = {
+	wcsheader: new Object(),
+	wcs: new wcs(),
+	relative_tile: {"x": -30, "y": -30}, // the wcs is relative to this tile
+	set_wcs: function(fits_header, tilePoint) {
+
+	    /* reset the wcs only if we have moved a considerable distance in the map
+	       the original fits files were split into 29 by 29 tiles
+	       this is where the 29 comes from
+	    */
+	    if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile_y - tilePoint.y) > 29 ) {
+		console.log("resetting wcs")
+		this.wcsheader['SIMPLE'] = "T";
+		this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
+		this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
+		this.wcsheader['NAXIS1'] = fits_header.get('NAXIS1');
+		this.wcsheader['NAXIS2'] = fits_header.get('NAXIS2');
+		this.wcsheader['CTYPE1'] = fits_header.get('CTYPE1');
+		this.wcsheader['CTYPE2'] = fits_header.get('CTYPE2');
+		this.wcsheader['CRPIX1'] = fits_header.get('CRPIX1');
+		this.wcsheader['CRPIX2'] = fits_header.get('CRPIX2');
+		this.wcsheader['CRVAL1'] = fits_header.get('CRVAL1');
+		this.wcsheader['CRVAL2'] = fits_header.get('CRVAL2');
+		this.wcsheader['CDELT1'] = fits_header.get('CDELT1');
+		this.wcsheader['CDELT2'] = fits_header.get('CDELT2');
+		this.wcs.init(this.wcsheader);
+		this.relative_tile.x = tilePoint.x
+		this.relative_tile.y = tilePoint.y
+	    }
+
+	},
+	pix2sky: function(map_x, map_y) {
+	    var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
+	    var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
+	    var fits_x = map_x - tile_x * TILE_SIZE // x coordinate in the reference frame of the fits file
+	    var fits_y = map_y - tile_y * TILE_SIZE // y coordinate in the reference frame of the fits file
+	    var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
+	    return sky_coordinates
+	}
+
+    }
 
     var ra_dec_to_map_coordinates = function(ra, dec) {
-        // see http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
-        // published filenames have naming scheme fxxxy_rdeep.fits
-        // where xxx refers to the RA going from right to left
-        // RA goes from 310.5 ° to 
-        // and y refers to DEC going from top to bottom
-        // DEC goes from -1.25° to 1.25°
+	/*
+           see http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
+           published filenames have naming scheme fxxxy_rdeep.fits
+           where xxx refers to the RA going from right to left
+           RA goes from 310.5 ° to 
+           and y refers to DEC going from top to bottom
+           DEC goes from -1.25° to 1.25°
+	*/
         
-        
+
         if ( dec < 1.25 && dec > -1.25) {
             var y = Math.floor((dec + 1.25) / 0.5) + 1
         }
@@ -215,10 +284,10 @@ $(function() {
         
         x = Math.floor(x / 0.5) + 1
         
-        // this returns the fits filename according to the naming scheme in 
-        // http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
-    
-
+        /*
+	   this returns the fits filename according to the naming scheme in 
+           http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
+	*/
         //~ y = "" + y // make y a string
         //~ x = "" + x // make x a string
         //~ // leftpad x with zeros
@@ -267,49 +336,30 @@ $(function() {
 	var go_to_latlng = map.unproject(L.point(x,y));
 	map.panTo(go_to_latlng);
 	L.marker(go_to_latlng).addTo(map);
-	
-	
-	
+
     }
+    
 
-  // Define a callback function for when the FITS file is received
-    var callback = function(args, canvas) {
+    /* this callback function draws the fits image on a canvas
+       and also triggers the (re)setting of the maps coordinate
+       system
+    */
+    var draw_fits_image = function(args, [canvas, tilePoint]) {
         var canvas_ctx = canvas.getContext('2d');
-   
         
-        // Get the first header-dataunit containing a dataunit
-        var hdu = this.getHDU(1);
-
-        // Get the first header
         var header = this.getHeader();
-
         var xdim=header.get('NAXIS1');
         var ydim=header.get('NAXIS2');
+	map_coordinates.set_wcs(header, tilePoint)
 
-        // Get the dataunit object
+        var hdu = this.getHDU(1);
         var dataunit = hdu.data;
-
-        // or we can do
         var image = this.getDataUnit();
         
-        //~ startTime = new Date();
+
         image.getFrame(0, function(arr) {
-            //~ endTime = new Date();
-            //~ console.log(endTime - startTime);
-            //~ console.log(arr.length);
-            //var minmax = image.getExtent(arr);
-            var minmax = [-2, 8000]
-            //~ console.log("minmax", minmax)
+            var minmax = [-4, 5000]
             var normalize = 1/(Math.log(minmax[1]-minmax[0]))
-            //~ console.log("normalize", normalize)
-            //~ for (var i = 0; i < arr.length; i++) {
-            //~ var value = arr[i];
-            //~ if (value != 0) {
-              //~ console.log(i, value);
-              //~ break;
-            //~ }
-            //~ }
-          
             var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
             for (var x = 0; x<xdim; x++) {
                 for (var y = 0; y<ydim; y++) {
@@ -341,24 +391,11 @@ $(function() {
         canvas.height = TILE_SIZE;
         if (tilePoint.x >= 0 && tilePoint.y >= 0 && tilePoint.x < 220 * 29 && tilePoint.y < 5 * 29 ) {
             var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +tilePoint.y + '/' + tilePoint.x + '-' + tilePoint.y +'.fits';
-            var fits = new FITS(fits_url, callback, canvas);
+            var fits = new FITS(fits_url, draw_fits_image, [canvas, tilePoint]);
         }
-        
-        
-       
-
         return canvas;
     };
 
-  // Set path to FITS file
-//  var url = "./f0044_rdeep.fits";
-
-  // Initialize a new FITS File object
-//  var fits = new FITS(url, callback);
-  
-
-  // Alternatively, the FITS object may be initialized using the HTML File API.
-  //var fits = new FITS.File(fileObj, callback);
 
     var map = new L.Map('map', {
 	    center: new L.latLng(10,10),
@@ -368,7 +405,7 @@ $(function() {
 	    crs: L.CRS.Simple
     });
     
-    map.panTo( new L.latLng( tile2lat(29,map.getZoom()), tile2long(6379,map.getZoom()) ) );
+    map.panTo( new L.latLng( tile2lat(0,map.getZoom()), tile2long(0,map.getZoom()) ) );
 
 
     var overlayLayers = new Object();
@@ -379,13 +416,189 @@ $(function() {
     var LayerControl = new L.control.layers(baseLayers, overlayLayers, {collapsed: true}).addTo(map);	
 
 
+//begin the selectors
+
+    var selectors = new L.FeatureGroup();
+    L.drawLocal.draw.handlers.rectangle.tooltip.start = 'select';
+    var selectorControl = new L.Control.Draw({
+	edit: {
+	    featureGroup: selectors
+	},
+	draw: {
+	    polyline: false,
+	    polygon: false,
+	    rectangle: { repeatMode: true },
+	    circle: false,
+	    //marker: { repeatMode: true, icon: L.icon({iconUrl: './map/images/empty_icon.png'})}
+	    marker: false
+	},
+	edit:false
+    });
+    
+    map.addControl(selectorControl);
+
+    map.on('draw:created', function (e) {
+	var type = e.layerType
+	var layer = e.layer
+	
+	if (type === 'rectangle') {
+	    
+	    var fits_image_to_binary = function(args, config) {
+		
+		// Dirty Hack
+		if (config.tile_x == config.tile_left && config.tile_y == config.tile_bottom) {
+
+		    var header = this.getHeader();
+		    var NAXIS1 = header.get('NAXIS1')
+		    var NAXIS2 = header.get('NAXIS2')
+		    var CRPIX1 = header.get('CRPIX1')
+		    var CRPIX2 = header.get('CRPIX2')
+		    var CRVAL1 = header.get('CRVAL1')
+		    var CRVAL2 = header.get('CRVAL2')
+		    
+		    fits_header_string = "SIMPLE  =                    T / conforms to FITS standard                      BITPIX  =                  -32 / array data type                                NAXIS   =                    2 / number of array dimensions                     DATE    = '2016-01-06T00:00:00' / Date FITS file was generated                  OBJECT  = 'Stripe 82'          / Name of the object observed                    EQUINOX =        2000.00000000 / Mean equinox                                   MJD-OBS =   5.181800000000E+04 / Modified Julian date at start                  RADESYS = 'ICRS    '           / Astrometric system                             CTYPE1  = 'RA---TAN'           / WCS projection type for this axis              CUNIT1  = 'deg     '           / Axis unit                                      CRVAL1  =   5.975000000000E+01 / World coordinate on this axis                  CD1_1   =  -1.100000000000E-04 / Linear projection matrix                       CTYPE2  = 'DEC--TAN'           / WCS projection type for this axis              CUNIT2  = 'deg     '           / Axis unit                                      CRVAL2  =   1.000000000000E+00 / World coordinate on this axis                  CD2_2   =   1.100000000000E-04 / Linear projection matrix                       FILTER  = 'rdeep   '                                                            WCSDIM  =                    2                                                  CDELT1  =  -1.1000000000000E-4                                                  CDELT2  =  1.10000000000000E-4                                                  LTM1_1  =                   1.                                                  LTM2_2  =                   1.                                                  WAT0_001= 'system=image'                                                        WAT1_001= 'wtype=tan axtype=ra'                                                 WAT2_001= 'wtype=tan axtype=dec'                                                "
+		    
+		    fits_header_string += "NAXIS1  =" + ("                     " + (config.maxx - config.minx)).slice(-21) + "                                                  "
+		    fits_header_string += "NAXIS2  =" + ("                     " + (config.maxy - config.miny)).slice(-21) + "                                                  "
+		    fits_header_string += "CRPIX1  =" + ("                     " + (CRPIX1 - (config.minx - config.tile_left * TILE_SIZE))).slice(-21) + "                                                  "
+		    fits_header_string += "CRPIX2  =" + ("                     " + (CRPIX2 - ((config.tile_bottom + 1) * TILE_SIZE - config.maxy))).slice(-21) + "                                                  "
+		    fits_header_string += "CRVAL1  =" + ("                     " + CRVAL1).slice(-21) + "                                                  "
+		    fits_header_string += "CRVAL2  =" + ("                     " + CRVAL2).slice(-21) + "                                                  "
+
+
+		    var fits_header_ascii = []
+		    for (var i = 0; i < fits_header_string.length; i++) {
+			fits_header_ascii[i] = fits_header_string.charCodeAt(i)
+		    }
+		    var Uint8_dest_fits_header = new Uint8Array(config.fits_file_dest_buffer)
+		    Uint8_dest_fits_header.set(new Uint8Array(fits_header_ascii))
+		    
+		    // fill rest of Header with with spaces
+		    for (var i = fits_header_string.length; i < 2880 * 2; i++) {
+			Uint8_dest_fits_header[i] = " ".charCodeAt()
+		    }
+		    
+		    // set END keyword at beginning of second header block
+		    for (var i=0; i<3; i++) {
+			Uint8_dest_fits_header[3200 + i] = "END".charCodeAt(i)
+		    }
+		    
+		}
+		
+		
+		var image = this.getDataUnit();
+		image.getFrame(0, function(arr, config) {
+		    var fits_image_data_view = new DataView(config.fits_file_dest_buffer, 2880 * 2)
+		    for (var y_src = Math.max(TILE_SIZE * (config.tile_y +1) - config.maxy, 0)  , y_dest = config.y_offset; y_src < Math.min(TILE_SIZE * (config.tile_y+1) - config.miny, TILE_SIZE); y_src++, y_dest++) {
+			for (var x_src = Math.max(config.minx - TILE_SIZE * config.tile_x, 0), x_dest = config.x_offset; x_src< Math.min(config.maxx - TILE_SIZE * config.tile_x, TILE_SIZE); x_src++, x_dest++) {
+				fits_image_data_view.setFloat32((y_dest * (config.maxx - config.minx) + x_dest ) * 4, image.getPixel(arr, x_src, y_src), false)
+			    }
+		    }
+		
+		    if (config.tile_x == config.tile_right) {
+			config.tile_x = config.tile_left
+			config.tile_y--
+			config.y_offset=y_dest
+			config.x_offset=0
+		    }
+		    else {
+			config.tile_x++
+			config.x_offset=x_dest
+		    }
+
+		    if (config.tile_y < config.tile_top) {
+			// provide download
+			binary_to_file(config.fits_file_dest_buffer, 'out.fits')
+
+		    }
+		    else {
+			assemble_fits_data(config)
+		    }
+
+		}, config);
+	    }
+
+	    var assemble_fits_data = function(config) {     
+
+		var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +config.tile_y+ '/' + config.tile_x + '-' + config.tile_y +'.fits';
+		var fits = new FITS(fits_url, fits_image_to_binary, config);
+
+	    }
+	    
+
+//start here
+	    var config = {}
+	    /* 
+		MAX_X, MIN_X refer to the largest/smallest tile number 
+		in x-direction, config.maxx/.minx/.maxy/.miny refer 
+		to the pixel number in x/y-direction
+	    */
+	    config.minx = (MAX_X + 1) * TILE_SIZE;  
+	    config.miny = (MAX_Y + 1 ) * TILE_SIZE;
+	    config.maxx = MIN_X;
+	    config.maxy = MIN_Y;
+	    var x, y, apoint;
+	    for (var i = 0; i<=3; i++) {
+		apoint = map.project(layer._latlngs[0][i], MAX_ZOOM);
+		x=apoint.x;
+		y=apoint.y;
+		if (x < config.minx) { config.minx = x };
+		if (x >= config.maxx) { config.maxx = x };
+		if (y < config.miny) { config.miny = y };
+		if (y >= config.maxy) { config.maxy = y };
+	    }
+	    if (config.minx < MIN_X ) { config.minx = MIN_X };
+	    if (config.miny < MIN_Y ) { config.miny = MIN_Y };
+
+
+	    config.tile_left = Math.floor(config.minx / TILE_SIZE);
+	    config.tile_top = Math.floor(config.miny / TILE_SIZE);
+	    config.tile_right = Math.floor(config.maxx / TILE_SIZE);
+	    config.tile_bottom = Math.floor(config.maxy / TILE_SIZE);
+	    
+	    config.tile_y = config.tile_bottom
+	    config.tile_x = config.tile_left
+	    
+	    config.x_offset = 0
+	    config.y_offset = 0
+	    
+	    var num_output_pixel = (config.maxy - config.miny) * (config.maxx - config.minx)
+	    config.fits_file_dest_buffer = new ArrayBuffer(2880 * 2 + Math.ceil(num_output_pixel * 4 / 2880) * 2880)
+    
+	    assemble_fits_data(config)
+
+	}
+    });
+    
+
+//end the selectors
+
+
+    map.on('click', onMapClick);
+    function onMapClick(e) {
+	var map_x = long2tile(e.latlng.lng, map.getZoom());
+	var map_y = lat2tile(e.latlng.lat, map.getZoom());
+	console.log("map_x", map_x, "map_y", map_y)
+	latlng = map.project(L.latLng(e.latlng.lat,e.latlng.lng))
+	console.log("latlng", latlng)
+	radec = map_coordinates.pix2sky(map_x, map_y)
+	console.log(radec)
+    }
 
     var mousePositionControl = new L.control.mousePosition({
         lngFormatter: function(lng) {
-            return long2tile(lng, map.getZoom())
+            //~ return long2tile(lng, map.getZoom())
+	    var coords = map.project(L.latLng(0,lng))
+	    var ra = map_coordinates.pix2sky(coords.x, coords.y)[0]
+	    var rounded_ra = Math.round(ra * 100000) / 100000
+	    return "Ra: " + rounded_ra
         }, 
         latFormatter: function(lat) {
-            return lat2tile(lat, map.getZoom())
+            //~ return lat2tile(lat, map.getZoom())
+	    var coords = map.project(L.latLng(lat,0))
+	    var dec = map_coordinates.pix2sky(coords.x, coords.y)[1]
+	    var rounded_dec = Math.round(dec * 100000) /100000
+	    return "Dec: " + rounded_dec
         }, 
         lngFirst: true
     });
@@ -401,7 +614,7 @@ $(function() {
             var ra = radec.data[0][0]
             var dec = radec.data[0][1]
             var tile = ra_dec_to_map_coordinates(ra, dec);
-            var fits_url = BASE_DIRECTORY +'/splitfits3/map/' + tile.y + '/' + tile.x + '-' + tile.y +'.fits';
+            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' + tile.y + '/' + tile.x + '-' + tile.y +'.fits';
             var fits = new FITS(fits_url, pan_to_radec, {"radec": [ra, dec], "tile": tile});
             
             //~ map.panTo( new L.latLng( tile2lat(xy_array.data[0][1],map.getZoom()), tile2long(xy_array.data[0][0],map.getZoom()) ) );
