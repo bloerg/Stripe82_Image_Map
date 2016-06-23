@@ -109,7 +109,7 @@ else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
 
   if (typeof console !== 'undefined') {
     if (!Module['print']) Module['print'] = function print(x) {
-      console.log(x);
+      //~ console.log(x);
     };
     if (!Module['printErr']) Module['printErr'] = function printErr(x) {
       console.log(x);
