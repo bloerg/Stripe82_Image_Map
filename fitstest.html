@@ -65,6 +65,17 @@
             <div class="sidebar-pane" id="image_adjust">
                 <h1 class="sidebar-header">Image Adjustment<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
 		<p> Invert Colors <input id="checkbox_invert_color" type="checkbox" aria-label="checkbox for switching to inverted colors"> </p>
+		<div class="input-group">
+		  <input type="text" id="text_set_plot_minimum"  class="form-control" placeholder="-4.0">
+		  <span class="input-group-btn">
+		    <button class="btn btn-default" id="btn_set_plot_minimum" type="button">set plot minimum</button>
+		  </span>
+		  <input type="text" id="text_set_plot_maximum" class="form-control" placeholder="5000.0">		  
+		  <span class="input-group-btn">
+		    <button class="btn btn-default" id="btn_set_plot_maximum" type="button">set plot maximum</button>
+		  </span>
+
+		</div><!-- /input-group -->
             </div>
 
             <div class="sidebar-pane" id="messages">
@@ -177,7 +188,7 @@ $(function() {
     
     function binary_to_file(binary, filename) {
 
-	var blob = new Blob([binary], {type: "octet/stream"})
+	var blob = new Blob([binary], {type: "image/fits"})
 	var uri = window.URL.createObjectURL(blob);
 
 	var link = document.createElement("a");    
@@ -235,8 +246,8 @@ $(function() {
 	pix2sky: function(map_x, map_y) {
 	    var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
 	    var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
-	    var fits_x = map_x - tile_x * TILE_SIZE // x coordinate in the reference frame of the fits file
-	    var fits_y = map_y - tile_y * TILE_SIZE // y coordinate in the reference frame of the fits file
+	    var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
+	    var fits_y = (this.relative_tile.y + 1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
 	    var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
 	    return sky_coordinates
 	}
@@ -359,12 +370,15 @@ $(function() {
         
 
         image.getFrame(0, function(arr) {
-            var minmax = [-4, 5000]
-            var normalize = 1/(Math.log(minmax[1]-minmax[0]))
+	    var plot_minimum = $("#text_set_plot_minimum").val()*1
+	    var plot_maximum = $("#text_set_plot_maximum").val()*1
+	    if (isNaN(plot_minimum) || plot_minimum == "" ) plot_minimum =  $("#text_set_plot_minimum").attr("placeholder")*1
+	    if (isNaN(plot_maximum) || plot_maximum == "" ) plot_maximum =  $("#text_set_plot_maximum").attr("placeholder")*1
+            var normalize = 1/(Math.log(plot_maximum-plot_minimum))
             var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
             for (var x = 0; x<xdim; x++) {
                 for (var y = 0; y<ydim; y++) {
-		    var color_value = Math.log10((image.getPixel(arr, x, ydim-y-1)) - minmax[0]) * normalize * 255
+		    var color_value = Math.log10((image.getPixel(arr, x, ydim-y-1)) - plot_minimum) * normalize * 255
                     for (i = 0; i<3; i++) {
 			if (INVERT_COLORS) {
 			    image_data.data[x*4+y*(xdim*4) + i] = 255 - color_value
@@ -583,13 +597,19 @@ $(function() {
 
     map.on('click', onMapClick);
     function onMapClick(e) {
-	var map_x = long2tile(e.latlng.lng, map.getZoom());
-	var map_y = lat2tile(e.latlng.lat, map.getZoom());
-	console.log("map_x", map_x, "map_y", map_y)
-	latlng = map.project(L.latLng(e.latlng.lat,e.latlng.lng))
-	console.log("latlng", latlng)
-	radec = map_coordinates.pix2sky(map_x, map_y)
-	console.log(radec)
+	var coords = map.project(e.latlng, map.getZoom());
+	var ra,dec;
+	[ra, dec] = map_coordinates.pix2sky(coords.x, coords.y)
+	var ra, dec;
+	var popup_string = "Ra, Dec: " + Math.round(ra * 100000) / 100000 +
+	                   ", " + Math.round(dec * 100000) / 100000 +
+			   "<br />" +
+			   '<a href="http://skyserver.sdss.org/dr12/en/tools/explore/summary.aspx?ra=' + ra + "&dec=" + dec + '" target="_blank">Explore</a> ' +
+			   '<a href="http://skyserver.sdss.org/dr12/en/tools/chart/navi.aspx?ra=' + ra + '&dec=' + dec + '&scale=0.2" target="_blank">Navigate</a>'
+	var popup = L.popup()
+	    .setLatLng(e.latlng)
+	    .setContent(popup_string)
+	    .openOn(map);
     }
 
     var mousePositionControl = new L.control.mousePosition({
@@ -637,6 +657,21 @@ $(function() {
 	
 	}
     });
+    
+    $("#btn_set_plot_minimum").click(function() {
+	if (map.hasLayer(fits_layer) ) {
+	    map.removeLayer(fits_layer)
+	    map.addLayer(fits_layer)
+	}
+    })
+
+    $("#btn_set_plot_maximum").click(function() {
+	if (map.hasLayer(fits_layer) ) {
+	    map.removeLayer(fits_layer)
+	    map.addLayer(fits_layer)
+	}
+    })
+
     
     $("#checkbox_invert_color").click(function() {
 	INVERT_COLORS = ($("#checkbox_invert_color").prop('checked'))
