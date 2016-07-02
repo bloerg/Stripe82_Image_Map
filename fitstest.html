@@ -225,8 +225,6 @@ $(function() {
 	       this is where the 29 comes from
 	    */
 	    if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
-	    //~ if (this.relative_tile.y < 0 && this.relative_tile.x < 0 && tilePoint.y == 0) {
-	    //~ if ( (tilePoint.y + 1) % 29 == 0 || (tilePoint.x + 1) % 29 == 0 ) {
 		this.wcsheader['SIMPLE'] = "T";
 		this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
 		this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
@@ -243,7 +241,6 @@ $(function() {
 		this.wcs.init(this.wcsheader);
 		this.relative_tile.x = tilePoint.x
 		this.relative_tile.y = tilePoint.y
-		console.log(this.relative_tile)
 	    }
 
 	},
@@ -253,7 +250,6 @@ $(function() {
 	    var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
 	    var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
 	    var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
-	    console.log("map_x: ", map_x * 1, "map_y: ", map_y * 1, "tile_x: ", tile_x, "tile_y: ", tile_y, "fits_x: ", fits_x, "fits_y: ", fits_y, "sky_coordinates: ", sky_coordinates)
 	    return sky_coordinates
 	}
 
