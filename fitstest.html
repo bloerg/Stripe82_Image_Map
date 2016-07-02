@@ -217,13 +217,16 @@ $(function() {
 	wcsheader: new Object(),
 	wcs: new wcs(),
 	relative_tile: {"x": -30, "y": -30}, // the wcs is relative to this tile
+	last_latLng: new L.latLng(0,0),
 	set_wcs: function(fits_header, tilePoint) {
 
 	    /* reset the wcs only if we have moved a considerable distance in the map
 	       the original fits files were split into 29 by 29 tiles
 	       this is where the 29 comes from
 	    */
-	    if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile_y - tilePoint.y) > 29 ) {
+	    if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
+	    //~ if (this.relative_tile.y < 0 && this.relative_tile.x < 0 && tilePoint.y == 0) {
+	    //~ if ( (tilePoint.y + 1) % 29 == 0 || (tilePoint.x + 1) % 29 == 0 ) {
 		this.wcsheader['SIMPLE'] = "T";
 		this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
 		this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
@@ -240,6 +243,7 @@ $(function() {
 		this.wcs.init(this.wcsheader);
 		this.relative_tile.x = tilePoint.x
 		this.relative_tile.y = tilePoint.y
+		console.log(this.relative_tile)
 	    }
 
 	},
@@ -247,14 +251,15 @@ $(function() {
 	    var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
 	    var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
 	    var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
-	    var fits_y = (this.relative_tile.y + 1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
+	    var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
 	    var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
+	    console.log("map_x: ", map_x * 1, "map_y: ", map_y * 1, "tile_x: ", tile_x, "tile_y: ", tile_y, "fits_x: ", fits_x, "fits_y: ", fits_y, "sky_coordinates: ", sky_coordinates)
 	    return sky_coordinates
 	}
 
     }
 
-    var ra_dec_to_map_coordinates = function(ra, dec) {
+    var ra_dec_to_tile = function(ra, dec) {
 	/*
            see http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
            published filenames have naming scheme fxxxy_rdeep.fits
@@ -267,6 +272,7 @@ $(function() {
 
         if ( dec < 1.25 && dec > -1.25) {
             var y = Math.floor((dec + 1.25) / 0.5) + 1
+	    console.log("y", y)
         }
         else if (dec == 1.25) {
             var y = 5
@@ -347,8 +353,11 @@ $(function() {
         var y = tile.y * TILE_SIZE - coordinates_pixel[1] + header.get('NAXIS2'); // last term because y coordinate is inversed in fits-files
 	var go_to_latlng = map.unproject(L.point(x,y));
 	map.panTo(go_to_latlng);
-	L.marker(go_to_latlng).addTo(map);
-
+	L.marker(go_to_latlng)
+	    .on('click', function(e) {
+		map.removeLayer(this)
+	    })
+	    .addTo(map);
     }
     
 
@@ -423,6 +432,7 @@ $(function() {
 	    minZoom: MIN_ZOOM,
 	    maxZoom: MAX_ZOOM,
 	    zoom: MAX_ZOOM,
+	    closePopupOnClick: true,
 	    crs: L.CRS.Simple
     });
     
@@ -615,14 +625,18 @@ $(function() {
     var mousePositionControl = new L.control.mousePosition({
         lngFormatter: function(lng) {
             //~ return long2tile(lng, map.getZoom())
-	    var coords = map.project(L.latLng(0,lng))
+	    map_coordinates.last_latLng.lng = lng
+	    //~ var coords = map.project(L.latLng(0,lng))
+	    var coords = map.project(map_coordinates.last_latLng)
 	    var ra = map_coordinates.pix2sky(coords.x, coords.y)[0]
 	    var rounded_ra = Math.round(ra * 100000) / 100000
 	    return "Ra: " + rounded_ra
         }, 
         latFormatter: function(lat) {
             //~ return lat2tile(lat, map.getZoom())
-	    var coords = map.project(L.latLng(lat,0))
+	    map_coordinates.last_latLng.lat = lat
+	    //~ var coords = map.project(L.latLng(lat,0))
+	    var coords = map.project(map_coordinates.last_latLng)
 	    var dec = map_coordinates.pix2sky(coords.x, coords.y)[1]
 	    var rounded_dec = Math.round(dec * 100000) /100000
 	    return "Dec: " + rounded_dec
@@ -638,9 +652,9 @@ $(function() {
             console.log("do nothing");
         }
         else if(radec.data[0] && radec.data[0].length == 2) {
-            var ra = radec.data[0][0]
-            var dec = radec.data[0][1]
-            var tile = ra_dec_to_map_coordinates(ra, dec);
+            var ra = 1 * radec.data[0][0] // multiply by one to make sure it's a number
+            var dec = 1 * radec.data[0][1] // multiply by one to make sure it's a number
+            var tile = ra_dec_to_tile(ra, dec);
             var fits_url = BASE_DIRECTORY +'/splitfits4/map/' + tile.y + '/' + tile.x + '-' + tile.y +'.fits';
             var fits = new FITS(fits_url, pan_to_radec, {"radec": [ra, dec], "tile": tile});
             
