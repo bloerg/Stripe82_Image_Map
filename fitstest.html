@@ -268,7 +268,6 @@ $(function() {
 
         if ( dec < 1.25 && dec > -1.25) {
             var y = Math.floor((dec + 1.25) / 0.5) + 1
-	    console.log("y", y)
         }
         else if (dec == 1.25) {
             var y = 5
@@ -474,7 +473,6 @@ $(function() {
 		
 		// Dirty Hack
 		if (config.tile_x == config.tile_left && config.tile_y == config.tile_bottom) {
-
 		    var header = this.getHeader();
 		    var NAXIS1 = header.get('NAXIS1')
 		    var NAXIS2 = header.get('NAXIS2')
@@ -482,8 +480,7 @@ $(function() {
 		    var CRPIX2 = header.get('CRPIX2')
 		    var CRVAL1 = header.get('CRVAL1')
 		    var CRVAL2 = header.get('CRVAL2')
-		    
-		    fits_header_string = "SIMPLE  =                    T / conforms to FITS standard                      BITPIX  =                  -32 / array data type                                NAXIS   =                    2 / number of array dimensions                     DATE    = '2016-01-06T00:00:00' / Date FITS file was generated                  OBJECT  = 'Stripe 82'          / Name of the object observed                    EQUINOX =        2000.00000000 / Mean equinox                                   MJD-OBS =   5.181800000000E+04 / Modified Julian date at start                  RADESYS = 'ICRS    '           / Astrometric system                             CTYPE1  = 'RA---TAN'           / WCS projection type for this axis              CUNIT1  = 'deg     '           / Axis unit                                      CRVAL1  =   5.975000000000E+01 / World coordinate on this axis                  CD1_1   =  -1.100000000000E-04 / Linear projection matrix                       CTYPE2  = 'DEC--TAN'           / WCS projection type for this axis              CUNIT2  = 'deg     '           / Axis unit                                      CRVAL2  =   1.000000000000E+00 / World coordinate on this axis                  CD2_2   =   1.100000000000E-04 / Linear projection matrix                       FILTER  = 'rdeep   '                                                            WCSDIM  =                    2                                                  CDELT1  =  -1.1000000000000E-4                                                  CDELT2  =  1.10000000000000E-4                                                  LTM1_1  =                   1.                                                  LTM2_2  =                   1.                                                  WAT0_001= 'system=image'                                                        WAT1_001= 'wtype=tan axtype=ra'                                                 WAT2_001= 'wtype=tan axtype=dec'                                                "
+		    fits_header_string = "SIMPLE  =                    T / conforms to FITS standard                      BITPIX  =                  -32 / array data type                                NAXIS   =                    2 / number of array dimensions                     DATE    = '2016-01-06T00:00:00' / Date FITS file was generated                  OBJECT  = 'Stripe 82'          / Name of the object observed                    EQUINOX =        2000.00000000 / Mean equinox                                   MJD-OBS =   5.181800000000E+04 / Modified Julian date at start                  RADESYS = 'ICRS    '           / Astrometric system                             CTYPE1  = 'RA---TAN'           / WCS projection type for this axis              CUNIT1  = 'deg     '           / Axis unit                                      CD1_1   =  -1.100000000000E-04 / Linear projection matrix                       CTYPE2  = 'DEC--TAN'           / WCS projection type for this axis              CUNIT2  = 'deg     '           / Axis unit                                      CD2_2   =   1.100000000000E-04 / Linear projection matrix                       FILTER  = 'rdeep   '                                                            WCSDIM  =                    2                                                  CDELT1  =  -1.1000000000000E-4                                                  CDELT2  =  1.10000000000000E-4                                                  LTM1_1  =                   1.                                                  LTM2_2  =                   1.                                                  WAT0_001= 'system=image'                                                        WAT1_001= 'wtype=tan axtype=ra'                                                 WAT2_001= 'wtype=tan axtype=dec'                                                "
 		    
 		    fits_header_string += "NAXIS1  =" + ("                     " + (config.maxx - config.minx)).slice(-21) + "                                                  "
 		    fits_header_string += "NAXIS2  =" + ("                     " + (config.maxy - config.miny)).slice(-21) + "                                                  "
