@@ -480,8 +480,11 @@ $(function() {
 		    var CRPIX2 = header.get('CRPIX2')
 		    var CRVAL1 = header.get('CRVAL1')
 		    var CRVAL2 = header.get('CRVAL2')
+		    
+		    // this is the string representation of the constant fits header part
 		    fits_header_string = "SIMPLE  =                    T / conforms to FITS standard                      BITPIX  =                  -32 / array data type                                NAXIS   =                    2 / number of array dimensions                     DATE    = '2016-01-06T00:00:00' / Date FITS file was generated                  OBJECT  = 'Stripe 82'          / Name of the object observed                    EQUINOX =        2000.00000000 / Mean equinox                                   MJD-OBS =   5.181800000000E+04 / Modified Julian date at start                  RADESYS = 'ICRS    '           / Astrometric system                             CTYPE1  = 'RA---TAN'           / WCS projection type for this axis              CUNIT1  = 'deg     '           / Axis unit                                      CD1_1   =  -1.100000000000E-04 / Linear projection matrix                       CTYPE2  = 'DEC--TAN'           / WCS projection type for this axis              CUNIT2  = 'deg     '           / Axis unit                                      CD2_2   =   1.100000000000E-04 / Linear projection matrix                       FILTER  = 'rdeep   '                                                            WCSDIM  =                    2                                                  CDELT1  =  -1.1000000000000E-4                                                  CDELT2  =  1.10000000000000E-4                                                  LTM1_1  =                   1.                                                  LTM2_2  =                   1.                                                  WAT0_001= 'system=image'                                                        WAT1_001= 'wtype=tan axtype=ra'                                                 WAT2_001= 'wtype=tan axtype=dec'                                                "
 		    
+		    // this is the changing part of the fits header
 		    fits_header_string += "NAXIS1  =" + ("                     " + (config.maxx - config.minx)).slice(-21) + "                                                  "
 		    fits_header_string += "NAXIS2  =" + ("                     " + (config.maxy - config.miny)).slice(-21) + "                                                  "
 		    fits_header_string += "CRPIX1  =" + ("                     " + (CRPIX1 - (config.minx - config.tile_left * TILE_SIZE))).slice(-21) + "                                                  "
@@ -489,7 +492,7 @@ $(function() {
 		    fits_header_string += "CRVAL1  =" + ("                     " + CRVAL1).slice(-21) + "                                                  "
 		    fits_header_string += "CRVAL2  =" + ("                     " + CRVAL2).slice(-21) + "                                                  "
 
-
+		    // convert the string representation of the fits header into binary
 		    var fits_header_ascii = []
 		    for (var i = 0; i < fits_header_string.length; i++) {
 			fits_header_ascii[i] = fits_header_string.charCodeAt(i)
@@ -531,8 +534,20 @@ $(function() {
 		    }
 
 		    if (config.tile_y < config.tile_top) {
+
+			// determin boundaries of rectangle selection for
+			// download file default name
+			var upper_right_coords = map.project(layer._bounds._northEast, map.getZoom());
+			var lower_left_coords = map.project(layer._bounds._southWest, map.getZoom());
+			var ra_left, ra_right, dec_upper, dec_lower;
+			[ra_right, dec_upper] = map_coordinates.pix2sky(upper_right_coords.x, upper_right_coords.y);
+			[ra_left, dec_lower] = map_coordinates.pix2sky(lower_left_coords.x, lower_left_coords.y);
+			var ra_center = Math.min(ra_right, ra_left) + 0.5* (Math.max(ra_right, ra_left) - Math.min(ra_right, ra_left));
+			var dec_center = Math.min(dec_lower, dec_upper) + 0.5* (Math.max(dec_upper, dec_lower) - Math.min(dec_upper, dec_lower));
+			var fits_filename = "RA_"+ ra_center.toFixed(4) + "-DEC_" + dec_center.toFixed(4) + ".fits";
+			
 			// provide download
-			binary_to_file(config.fits_file_dest_buffer, 'out.fits')
+			binary_to_file(config.fits_file_dest_buffer, fits_filename);
 
 		    }
 		    else {
