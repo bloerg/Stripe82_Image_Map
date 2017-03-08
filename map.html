@@ -1,0 +1,741 @@
+<html>
+<head>
+
+    <script src="./js/jquery-1.11.0.min.js"></script>
+    <script src="./js/fits.js" type="text/javascript" charset="utf-8"></script>
+    <script src="./js/wcs.js" type="text/javascript"></script>
+    <script src="./js/leaflet.js"></script>
+    <script src="./js/leaflet.draw.js"></script>
+    <script src="./js/L.Control.MousePosition.js"></script>
+    <script src="./js/leaflet-sidebar.js"></script>
+    <script src="./js/papaparse.min.js"></script>
+
+    
+    <link rel="stylesheet" href="./css/L.Control.MousePosition.css" />
+    <link rel="stylesheet" href="./css/leaflet.css" />
+    <link rel="stylesheet" href="./css/leaflet.draw.css" />
+    <link rel="stylesheet" href="./css/leaflet-sidebar.css" />
+    <link rel="stylesheet" href="./css/font-awesome.min.css">
+<!--
+    <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet">
+-->
+
+    <style type="text/css" media="screen">
+
+	#map {
+            height: 100%;
+            background-color: #000000; 
+        }
+	.leaflet-draw-tooltip {
+		display: none;
+	}
+    </style>
+
+</head>
+
+<body>
+    <div id="sidebar" class="sidebar collapsed">
+        <!-- Nav tabs -->
+        <div class="sidebar-tabs">
+            <ul role="tablist">
+                <li><a href="#home" role="tab"><i class="fa fa-search"></i></a></li>
+                <li><a href="#image_adjust" role="tab"><i class="fa fa-adjust"></i></a></li>
+<!--                <li><a href="#import" role="tab"><i class="fa fa-upload"></i></a></li> -->
+            </ul>
+
+            <ul role="tablist">
+<!--                <li><a href="#settings" role="tab"><i class="fa fa-gear"></i></a></li> -->
+            </ul>
+        </div>
+
+        <!-- Tab panes -->
+        <div class="sidebar-content">
+            <div class="sidebar-pane" id="home">
+                <h1 class="sidebar-header">
+                    Coordinate Search.
+                    <span class="sidebar-close"><i class="fa fa-caret-left"></i></span>
+                </h1>
+                <form class="navbar-form navbar-right" id="goto_map_coordinate_input_form">
+                    <input type="text" class="form-control" placeholder="RA, DEC" id="input_goto_map_coordinate">
+                    <button type="button" class="btn btn-default" id="button_goto_map_coordinate">Go!</button>
+		    <p>
+			<label for="checkbox_use_coordinates_as_filename">use coordinates as export filename</label>
+			<input id="checkbox_use_coordinates_as_filename" type="checkbox" aria-label="checked if coordinates are used to generate the filename of an export">
+		    </p>
+                </form>
+
+            </div>
+
+            <div class="sidebar-pane" id="image_adjust">
+                <h1 class="sidebar-header">Image Adjustment<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+		<p> Invert Colors <input id="checkbox_invert_color" type="checkbox" aria-label="checkbox for switching to inverted colors"> </p>
+		<div class="input-group">
+		  <input type="text" id="text_set_plot_minimum"  class="form-control" placeholder="-4.0">
+		  <span class="input-group-btn">
+		    <button class="btn btn-default" id="btn_set_plot_minimum" type="button">set plot minimum</button>
+		  </span>
+		  <input type="text" id="text_set_plot_maximum" class="form-control" placeholder="5000.0">		  
+		  <span class="input-group-btn">
+		    <button class="btn btn-default" id="btn_set_plot_maximum" type="button">set plot maximum</button>
+		  </span>
+
+		</div><!-- /input-group -->
+            </div>
+
+            <div class="sidebar-pane" id="messages">
+                <h1 class="sidebar-header">Messages<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+            </div>
+
+            <div class="sidebar-pane" id="settings">
+                <h1 class="sidebar-header">Settings<span class="sidebar-close"><i class="fa fa-caret-left"></i></span></h1>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"  class="sidebar-map"></div>
+    
+    
+<script type="text/javascript">
+
+$(function() {
+
+    //~ $( window ).load(function() {
+        //~ $( "#map" ).css( "height", "95%" );
+        //~ map.invalidateSize();
+    //~ });
+
+    //<global>
+    MAX_ZOOM = 13
+    MIN_ZOOM = 13
+    TILE_SIZE = 157
+    MIN_X = 0;
+    MIN_Y = MIN_X;
+    MAX_X = 220 * 29 - 1;
+    MAX_Y = MAX_X;
+    PAGE_TITLE = "Stripe 82 Deep Image Coadd Map";
+    BASE_DIRECTORY = "./";
+    HAS_NO_BACKGROUND = false;
+    INVERT_COLORS = false
+    $.ajax({
+	url: "./config" + ".json",
+	type: "GET",
+	dataType: "json",
+	async: false,
+	success: function(data) {
+	    if ( data.max_zoom) {
+		MAX_ZOOM = data.max_zoom
+	    }
+	    if ( data.min_zoom) {
+		MIN_ZOOM = data.min_zoom
+	    }
+	    if ( data.tile_size) {
+		TILE_SIZE = data.tile_size
+	    }
+	    if ( data.min_x) {
+		MIN_X = data.min_x
+	    }
+	    if ( data.max_x) {
+		MAX_X = data.max_x
+	    }
+	    if ( data.min_y) {
+		MIN_Y = data.min_y
+	    }
+	    if ( data.max_y) {
+		MAX_Y = data.max_y
+	    }
+	    if ( data.page_title) {
+		$("#pagetitle").text(data.page_title)
+	    }
+	    if ( data.base_directory) {
+		BASE_DIRECTORY = data.base_directory
+	    }
+	    if ( data.has_no_background) {
+		HAS_NO_BACKGROUND = data.has_no_background
+	    }
+
+	},
+	error: function(status) {
+	    //console.log(status);
+	}
+    });
+    //</global>
+
+
+    // helper functions
+
+    function getQueryVariable(variable)
+    {
+           var query = window.location.search.substring(1);
+           var vars = query.split("&");
+           for (var i=0;i<vars.length;i++) {
+                   var pair = vars[i].split("=");
+                   if(pair[0] == variable){return pair[1];}
+           }
+           return(false);
+    }
+    
+    function long2tile(lon,zoom) { 
+        coords = map.project(L.latLng(0,lon))
+	return (Math.floor(coords.x * Math.pow(2, MAX_ZOOM - zoom) / TILE_SIZE ) ); 
+    }
+    function lat2tile (lat,zoom) { 
+        coords = map.project(L.latLng(lat,0))
+	return (Math.floor(coords.y * Math.pow(2, MAX_ZOOM - zoom) / TILE_SIZE ) ); 
+    }
+    
+    function tile2long(x,zoom) {
+        return (map.unproject(L.point([x/Math.pow(2,(MAX_ZOOM - zoom))*TILE_SIZE, 0])).lng);
+    }
+    function tile2lat(y,zoom) {
+        return (map.unproject(L.point([0, y/Math.pow(2,(MAX_ZOOM - zoom))*TILE_SIZE])).lat);
+    }
+    
+    function binary_to_file(binary, filename) {
+
+	var blob = new Blob([binary], {type: "image/fits"})
+	var uri = window.URL.createObjectURL(blob);
+
+	var link = document.createElement("a");    
+	link.href = uri;
+	
+	//set the visibility hidden so it will not effect on your web-layout
+	link.style = "visibility:hidden";
+	link.download = filename;
+	
+	//this part will append the anchor tag and remove it after automatic click
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+    }
+
+    //end helper functions
+
+
+    var FITS = astro.FITS;
+    
+    
+    /* this object is for the handling of coordinate transformation
+       between the pixels in the map and right ascension / declination
+    */
+    var map_coordinates = {
+	wcsheader: new Object(),
+	wcs: new wcs(),
+	relative_tile: {"x": -30, "y": -30}, // the wcs is relative to this tile
+	last_latLng: new L.latLng(0,0),
+	set_wcs: function(fits_header, tilePoint) {
+
+	    /* reset the wcs only if we have moved a considerable distance in the map
+	       the original fits files were split into 29 by 29 tiles
+	       this is where the 29 comes from
+	    */
+	    if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
+		this.wcsheader['SIMPLE'] = "T";
+		this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
+		this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
+		this.wcsheader['NAXIS1'] = fits_header.get('NAXIS1');
+		this.wcsheader['NAXIS2'] = fits_header.get('NAXIS2');
+		this.wcsheader['CTYPE1'] = fits_header.get('CTYPE1');
+		this.wcsheader['CTYPE2'] = fits_header.get('CTYPE2');
+		this.wcsheader['CRPIX1'] = fits_header.get('CRPIX1');
+		this.wcsheader['CRPIX2'] = fits_header.get('CRPIX2');
+		this.wcsheader['CRVAL1'] = fits_header.get('CRVAL1');
+		this.wcsheader['CRVAL2'] = fits_header.get('CRVAL2');
+		this.wcsheader['CDELT1'] = fits_header.get('CDELT1');
+		this.wcsheader['CDELT2'] = fits_header.get('CDELT2');
+		this.wcs.init(this.wcsheader);
+		this.relative_tile.x = tilePoint.x
+		this.relative_tile.y = tilePoint.y
+	    }
+
+	},
+	pix2sky: function(map_x, map_y) {
+	    var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
+	    var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
+	    var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
+	    var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
+	    var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
+	    return sky_coordinates
+	}
+
+    }
+
+    var ra_dec_to_tile = function(ra, dec) {
+	/*
+           see http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
+           published filenames have naming scheme fxxxy_rdeep.fits
+           where xxx refers to the RA going from right to left
+           RA goes from 310.5 ° to 
+           and y refers to DEC going from top to bottom
+           DEC goes from -1.25° to 1.25°
+	*/
+        
+
+        if ( dec < 1.25 && dec > -1.25) {
+            var y = Math.floor((dec + 1.25) / 0.5) + 1
+	    console.log("y", y)
+        }
+        else if (dec == 1.25) {
+            var y = 5
+        }
+	else if (dec == -1.25) {
+	    var y = 1
+	}
+        else {
+            var y = 1
+        }
+        
+        if (ra >= 310 && ra <= 360 ) {
+            var x = (50 - (360 - ra) ) // map the ra interval [310, 360] -> [0, 50]
+        }
+        else if (ra >= 0 && ra < 60) {
+            var x = (ra + 50) // map the ra interval [0,60] -> [50,110]
+        }
+        else if (ra == 60) {
+            var x = 109.5
+        }
+        else if (ra < 0 && ra >= -50) {
+            var x = (50 + ra) // if ra given as negative number, map ra interval [-50,0] to [0, 50]
+        }
+        else {
+            var x = 0
+        }
+        
+        x = Math.floor(x / 0.5) + 1
+        
+        /*
+	   this returns the fits filename according to the naming scheme in 
+           http://www.iac.es/proyecto/stripe82/media/2016MNRAS.456.1359F.pdf
+	*/
+        //~ y = "" + y // make y a string
+        //~ x = "" + x // make x a string
+        //~ // leftpad x with zeros
+        //~ console.log(y)
+        //~ var xxx = "000"
+        //~ console.log(xxx)
+        //~ xxx = xxx.substr(0, xxx.length - x.length) + x
+        //~ console.log(xxx)
+        //~ return xxx + y
+        
+        
+        // the following returns the upper left tile
+        // i.e x-y.fits filename in the slippymap
+        // from the fxxxy_rdeep.fits file which was
+        // the origin of the tiles
+        y = 29 * ( 5 - y)
+        x = (220 - x) * 29
+        return ( {"x":x,"y":y} )
+        
+    }
+
+    var pan_to_radec = function(args, {radec, tile}) {
+        var ra=radec[0]
+        var dec=radec[1]
+        var header = this.getHeader();
+        var wcsheader = new Object();
+        wcsheader['SIMPLE'] = "T";
+        wcsheader['BITPIX'] = header.get('BITPIX');
+        wcsheader['NAXIS'] = header.get('NAXIS');
+        wcsheader['NAXIS1'] = header.get('NAXIS1');
+        wcsheader['NAXIS2'] = header.get('NAXIS2');
+        wcsheader['CTYPE1'] = header.get('CTYPE1');
+        wcsheader['CTYPE2'] = header.get('CTYPE2');
+        wcsheader['CRPIX1'] = header.get('CRPIX1');
+        wcsheader['CRPIX2'] = header.get('CRPIX2');
+        wcsheader['CRVAL1'] = header.get('CRVAL1');
+        wcsheader['CRVAL2'] = header.get('CRVAL2');
+        wcsheader['CDELT1'] = header.get('CDELT1');
+        wcsheader['CDELT2'] = header.get('CDELT2');
+
+        var w = new wcs();
+        w.init(wcsheader);
+        var coordinates_pixel = w.sky2pix(ra, dec) 
+        var x = tile.x * TILE_SIZE + coordinates_pixel[0]
+        var y = tile.y * TILE_SIZE - coordinates_pixel[1] + header.get('NAXIS2'); // last term because y coordinate is inversed in fits-files
+	var go_to_latlng = map.unproject(L.point(x,y));
+	map.panTo(go_to_latlng);
+	L.marker(go_to_latlng)
+	    .on('click', function(e) {
+		map.removeLayer(this)
+	    })
+	    .addTo(map);
+    }
+    
+
+    /* this callback function draws the fits image on a canvas
+       and also triggers the (re)setting of the maps coordinate
+       system
+    */
+    var draw_fits_image = function(args, [canvas, tilePoint]) {
+        var canvas_ctx = canvas.getContext('2d');
+        
+        var header = this.getHeader();
+        var xdim=header.get('NAXIS1');
+        var ydim=header.get('NAXIS2');
+	map_coordinates.set_wcs(header, tilePoint)
+
+        var hdu = this.getHDU(1);
+        var dataunit = hdu.data;
+        var image = this.getDataUnit();
+        
+
+        image.getFrame(0, function(arr) {
+	    var plot_minimum = $("#text_set_plot_minimum").val()*1
+	    var plot_maximum = $("#text_set_plot_maximum").val()*1
+	    if (isNaN(plot_minimum) || plot_minimum == "" ) plot_minimum =  $("#text_set_plot_minimum").attr("placeholder")*1
+	    if (isNaN(plot_maximum) || plot_maximum == "" ) plot_maximum =  $("#text_set_plot_maximum").attr("placeholder")*1
+            var normalize = 1/(Math.log(plot_maximum-plot_minimum))
+            var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
+            for (var x = 0; x<xdim; x++) {
+                for (var y = 0; y<ydim; y++) {
+		    var color_value = Math.log10((image.getPixel(arr, x, ydim-y-1)) - plot_minimum) * normalize * 255
+                    for (i = 0; i<3; i++) {
+			if (INVERT_COLORS) {
+			    image_data.data[x*4+y*(xdim*4) + i] = 255 - color_value
+
+			}
+			else {
+			    image_data.data[x*4+y*(xdim*4) + i] = color_value
+			}
+                        //alpha value
+                        image_data.data[x*4+y*(xdim*4) + 3] = 255
+                    }
+                }
+            }
+            canvas_ctx.putImageData(image_data, 0, 0);
+
+        });
+
+ 
+    }
+
+    var fits_layer = new L.GridLayer({
+        maxZoom: MAX_ZOOM,
+        minZoom: Math.max(MAX_ZOOM - 7, 0),
+        tileSize: TILE_SIZE,	
+        unloadInvisibleTiles: true,
+        noWrap: true,
+    });
+    fits_layer.createTile = function(tilePoint) {
+        var canvas = L.DomUtil.create('canvas', 'leaflet-tile');
+        canvas.width = TILE_SIZE;
+        canvas.height = TILE_SIZE;
+        if (tilePoint.x >= 0 && tilePoint.y >= 0 && tilePoint.x < 220 * 29 && tilePoint.y < 5 * 29 ) {
+            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +tilePoint.y + '/' + tilePoint.x + '-' + tilePoint.y +'.fits';
+            var fits = new FITS(fits_url, draw_fits_image, [canvas, tilePoint]);
+        }
+        return canvas;
+    };
+
+
+    var map = new L.Map('map', {
+	    center: new L.latLng(10,10),
+	    minZoom: MIN_ZOOM,
+	    maxZoom: MAX_ZOOM,
+	    zoom: MAX_ZOOM,
+	    closePopupOnClick: true,
+	    crs: L.CRS.Simple
+    });
+    
+    map.panTo( new L.latLng( tile2lat(0,map.getZoom()), tile2long(0,map.getZoom()) ) );
+
+
+    var overlayLayers = new Object();
+	var baseLayers = {
+	    "fits layer": fits_layer
+	}
+    fits_layer.addTo(map);
+    var LayerControl = new L.control.layers(baseLayers, overlayLayers, {collapsed: true}).addTo(map);	
+
+
+//begin the selectors
+
+    var selectors = new L.FeatureGroup();
+    L.drawLocal.draw.handlers.rectangle.tooltip.start = 'select';
+    var selectorControl = new L.Control.Draw({
+	edit: {
+	    featureGroup: selectors
+	},
+	draw: {
+	    polyline: false,
+	    polygon: false,
+	    rectangle: { repeatMode: true },
+	    circle: false,
+	    //marker: { repeatMode: true, icon: L.icon({iconUrl: './map/images/empty_icon.png'})}
+	    marker: false
+	},
+	edit:false
+    });
+    
+    map.addControl(selectorControl);
+
+    map.on('draw:created', function (e) {
+	var type = e.layerType
+	var layer = e.layer
+	
+	if (type === 'rectangle') {
+	    var fits_image_to_binary = function(args, config) {
+		
+		// Dirty Hack
+		if (config.tile_x == config.tile_left && config.tile_y == config.tile_bottom) {
+		    var header = this.getHeader();
+		    var NAXIS1 = header.get('NAXIS1')
+		    var NAXIS2 = header.get('NAXIS2')
+		    var CRPIX1 = header.get('CRPIX1')
+		    var CRPIX2 = header.get('CRPIX2')
+		    var CRVAL1 = header.get('CRVAL1')
+		    var CRVAL2 = header.get('CRVAL2')
+/*
+		    console.log(
+			CRPIX2, 
+			config.tile_bottom + 1, 
+			(config.tile_bottom + 1) * TILE_SIZE, 
+			(config.tile_bottom + 1) * TILE_SIZE - config.maxy, 
+			(CRPIX2 - ((config.tile_bottom + 1) * TILE_SIZE - config.maxy)) 
+		    )
+*/		    
+		    fits_header_string = "SIMPLE  =                    T / conforms to FITS standard                      BITPIX  =                  -32 / array data type                                NAXIS   =                    2 / number of array dimensions                     DATE    = '2016-01-06T00:00:00' / Date FITS file was generated                  OBJECT  = 'Stripe 82'          / Name of the object observed                    EQUINOX =        2000.00000000 / Mean equinox                                   MJD-OBS =   5.181800000000E+04 / Modified Julian date at start                  RADESYS = 'ICRS    '           / Astrometric system                             CTYPE1  = 'RA---TAN'           / WCS projection type for this axis              CUNIT1  = 'deg     '           / Axis unit                                      CD1_1   =  -1.100000000000E-04 / Linear projection matrix                       CTYPE2  = 'DEC--TAN'           / WCS projection type for this axis              CUNIT2  = 'deg     '           / Axis unit                                      CD2_2   =   1.100000000000E-04 / Linear projection matrix                       FILTER  = 'rdeep   '                                                            WCSDIM  =                    2                                                  CDELT1  =  -1.1000000000000E-4                                                  CDELT2  =  1.10000000000000E-4                                                  LTM1_1  =                   1.                                                  LTM2_2  =                   1.                                                  WAT0_001= 'system=image'                                                        WAT1_001= 'wtype=tan axtype=ra'                                                 WAT2_001= 'wtype=tan axtype=dec'                                                "
+		    fits_header_string += "NAXIS1  =" + ("                     " + (config.maxx - config.minx)).slice(-21) + "                                                  "
+		    fits_header_string += "NAXIS2  =" + ("                     " + (config.maxy - config.miny)).slice(-21) + "                                                  "
+		    fits_header_string += "CRPIX1  =" + ("                     " + (CRPIX1 - (config.minx - config.tile_left * TILE_SIZE))).slice(-21) + "                                                  "
+		    fits_header_string += "CRPIX2  =" + ("                     " + (CRPIX2 - ((config.tile_bottom + 1) * TILE_SIZE - config.maxy))).slice(-21) + "                                                  "
+		    fits_header_string += "CRVAL1  =" + ("                     " + CRVAL1).slice(-21) + "                                                  "
+		    fits_header_string += "CRVAL2  =" + ("                     " + CRVAL2).slice(-21) + "                                                  "
+
+
+		    var fits_header_ascii = []
+		    for (var i = 0; i < fits_header_string.length; i++) {
+			fits_header_ascii[i] = fits_header_string.charCodeAt(i)
+		    }
+		    var Uint8_dest_fits_header = new Uint8Array(config.fits_file_dest_buffer)
+		    Uint8_dest_fits_header.set(new Uint8Array(fits_header_ascii))
+		    
+		    // fill rest of Header with with spaces
+		    for (var i = fits_header_string.length; i < 2880 * 2; i++) {
+			Uint8_dest_fits_header[i] = " ".charCodeAt()
+		    }
+		    
+		    // set END keyword at beginning of second header block
+		    for (var i=0; i<3; i++) {
+			Uint8_dest_fits_header[3200 + i] = "END".charCodeAt(i)
+		    }
+		    
+		}
+		
+		
+		var image = this.getDataUnit();
+		image.getFrame(0, function(arr, config) {
+		    var fits_image_data_view = new DataView(config.fits_file_dest_buffer, 2880 * 2)
+		    for (var y_src = Math.max(TILE_SIZE * (config.tile_y +1) - config.maxy, 0)  , y_dest = config.y_offset; y_src < Math.min(TILE_SIZE * (config.tile_y+1) - config.miny, TILE_SIZE); y_src++, y_dest++) {
+			for (var x_src = Math.max(config.minx - TILE_SIZE * config.tile_x, 0), x_dest = config.x_offset; x_src< Math.min(config.maxx - TILE_SIZE * config.tile_x, TILE_SIZE); x_src++, x_dest++) {
+				fits_image_data_view.setFloat32((y_dest * (config.maxx - config.minx) + x_dest ) * 4, image.getPixel(arr, x_src, y_src), false)
+			    }
+		    }
+		
+		    if (config.tile_x == config.tile_right) {
+			config.tile_x = config.tile_left
+			config.tile_y--
+			config.y_offset=y_dest
+			config.x_offset=0
+		    }
+		    else {
+			config.tile_x++
+			config.x_offset=x_dest
+		    }
+
+		    if (config.tile_y < config.tile_top) {
+
+			if ($("#checkbox_use_coordinates_as_filename").prop("checked")) {
+			    var ra_dec = Papa.parse( $( "#input_goto_map_coordinate" ).val(), {dynamicTyping: true});
+			    if (ra_dec.data.length == 0) {
+				var fits_filename = "cutout.fits"
+			    }
+			    else if(ra_dec.data[0] && ra_dec.data[0].length == 2) {
+				var ra = 1 * ra_dec.data[0][0] // multiply by one to make sure it's a number
+				var dec = 1 * ra_dec.data[0][1] // multiply by one to make sure it's a number
+				var fits_filename = "RA_"+ ra.toFixed(4) + "-DEC_" + dec.toFixed(4) + ".fits";
+			    }
+			    else {
+				var fits_filename = "cutout.fits"
+			    }
+			}
+			else {
+			    var upper_right_coords = map.project(layer._bounds._northEast, map.getZoom());
+			    var lower_left_coords = map.project(layer._bounds._southWest, map.getZoom());
+			    var ra_left, ra_right, dec_upper, dec_lower;
+			    [ra_right, dec_upper] = map_coordinates.pix2sky(upper_right_coords.x, upper_right_coords.y);
+			    [ra_left, dec_lower] = map_coordinates.pix2sky(lower_left_coords.x, lower_left_coords.y);
+			    var ra_center = Math.min(ra_right, ra_left) + 0.5* (Math.max(ra_right, ra_left) - Math.min(ra_right, ra_left));
+			    var dec_center = Math.min(dec_lower, dec_upper) + 0.5* (Math.max(dec_upper, dec_lower) - Math.min(dec_upper, dec_lower));
+			    var fits_filename = "RA_"+ ra_center.toFixed(4) + "-DEC_" + dec_center.toFixed(4) + ".fits";
+			}
+			
+			// provide download
+			binary_to_file(config.fits_file_dest_buffer, fits_filename);
+
+		    }
+		    else {
+			assemble_fits_data(config)
+		    }
+
+		}, config);
+	    }
+
+	    var assemble_fits_data = function(config) {     
+
+		var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +config.tile_y+ '/' + config.tile_x + '-' + config.tile_y +'.fits';
+		var fits = new FITS(fits_url, fits_image_to_binary, config);
+
+	    }
+	    
+
+//start here
+	    var config = {}
+	    /* 
+		MAX_X, MIN_X refer to the largest/smallest tile number 
+		in x-direction, config.maxx/.minx/.maxy/.miny refer 
+		to the pixel number in x/y-direction
+	    */
+	    config.minx = (MAX_X + 1) * TILE_SIZE;  
+	    config.miny = (MAX_Y + 1 ) * TILE_SIZE;
+	    config.maxx = MIN_X;
+	    config.maxy = MIN_Y;
+	    var x, y, apoint;
+	    for (var i = 0; i<=3; i++) {
+		apoint = map.project(layer._latlngs[0][i], MAX_ZOOM);
+		x=apoint.x;
+		y=apoint.y;
+		if (x < config.minx) { config.minx = x };
+		if (x >= config.maxx) { config.maxx = x };
+		if (y < config.miny) { config.miny = y };
+		if (y >= config.maxy) { config.maxy = y };
+	    }
+	    if (config.minx < MIN_X ) { config.minx = MIN_X };
+	    if (config.miny < MIN_Y ) { config.miny = MIN_Y };
+
+
+	    config.tile_left = Math.floor(config.minx / TILE_SIZE);
+	    config.tile_top = Math.floor(config.miny / TILE_SIZE);
+	    config.tile_right = Math.floor(config.maxx / TILE_SIZE);
+	    config.tile_bottom = Math.floor(config.maxy / TILE_SIZE);
+	    
+	    config.tile_y = config.tile_bottom
+	    config.tile_x = config.tile_left
+	    
+	    config.x_offset = 0
+	    config.y_offset = 0
+	    
+	    var num_output_pixel = (config.maxy - config.miny) * (config.maxx - config.minx)
+	    config.fits_file_dest_buffer = new ArrayBuffer(2880 * 2 + Math.ceil(num_output_pixel * 4 / 2880) * 2880)
+    
+	    assemble_fits_data(config)
+
+	}
+    });
+    
+
+//end the selectors
+
+
+    map.on('click', onMapClick);
+    function onMapClick(e) {
+	var coords = map.project(e.latlng, map.getZoom());
+	var ra,dec;
+	[ra, dec] = map_coordinates.pix2sky(coords.x, coords.y)
+	var popup_string = "Ra, Dec: " + Math.round(ra * 100000) / 100000 +
+	                   ", " + Math.round(dec * 100000) / 100000 +
+			   "<br />" +
+			   '<a href="http://skyserver.sdss.org/dr12/en/tools/explore/summary.aspx?ra=' + ra + "&dec=" + dec + '" target="_blank">Explore</a> ' +
+			   '<a href="http://skyserver.sdss.org/dr12/en/tools/chart/navi.aspx?ra=' + ra + '&dec=' + dec + '&scale=0.2" target="_blank">Navigate</a>'
+	var popup = L.popup()
+	    .setLatLng(e.latlng)
+	    .setContent(popup_string)
+	    .openOn(map);
+    }
+
+    var mousePositionControl = new L.control.mousePosition({
+        lngFormatter: function(lng) {
+            //~ return long2tile(lng, map.getZoom())
+	    map_coordinates.last_latLng.lng = lng
+	    //~ var coords = map.project(L.latLng(0,lng))
+	    var coords = map.project(map_coordinates.last_latLng)
+	    var ra = map_coordinates.pix2sky(coords.x, coords.y)[0]
+	    var rounded_ra = Math.round(ra * 100000) / 100000
+	    return "Ra: " + rounded_ra
+        }, 
+        latFormatter: function(lat) {
+            //~ return lat2tile(lat, map.getZoom())
+	    map_coordinates.last_latLng.lat = lat
+	    //~ var coords = map.project(L.latLng(lat,0))
+	    var coords = map.project(map_coordinates.last_latLng)
+	    var dec = map_coordinates.pix2sky(coords.x, coords.y)[1]
+	    var rounded_dec = Math.round(dec * 100000) /100000
+	    return "Dec: " + rounded_dec
+        }, 
+        lngFirst: true
+    });
+    mousePositionControl.addTo(map);
+    var sidebar = L.control.sidebar('sidebar').addTo(map);
+    
+    
+    var goto_map_coordinate = function(radec) {
+        if (radec.data.length == 0) {
+            console.log("do nothing");
+        }
+        else if(radec.data[0] && radec.data[0].length == 2) {
+            var ra = 1 * radec.data[0][0] // multiply by one to make sure it's a number
+            var dec = 1 * radec.data[0][1] // multiply by one to make sure it's a number
+            var tile = ra_dec_to_tile(ra, dec);
+            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' + tile.y + '/' + tile.x + '-' + tile.y +'.fits';
+            var fits = new FITS(fits_url, pan_to_radec, {"radec": [ra, dec], "tile": tile});
+            
+            //~ map.panTo( new L.latLng( tile2lat(xy_array.data[0][1],map.getZoom()), tile2long(xy_array.data[0][0],map.getZoom()) ) );
+        }
+    }
+    
+    $("#button_goto_map_coordinate").click(function() {
+	goto_map_coordinate(Papa.parse( $( "#input_goto_map_coordinate" ).val(), {dynamicTyping: true}) );
+    });
+    $( "#goto_map_coordinate_input_form" ).keypress(function( event ) {
+	if ( event.which == 13 ) {
+	    goto_map_coordinate(Papa.parse( $( "#input_goto_map_coordinate" ).val(), {dynamicTyping: true}) );
+	
+	}
+    });
+    
+    $("#btn_set_plot_minimum").click(function() {
+	if (map.hasLayer(fits_layer) ) {
+	    map.removeLayer(fits_layer)
+	    map.addLayer(fits_layer)
+	}
+    })
+
+    $("#btn_set_plot_maximum").click(function() {
+	if (map.hasLayer(fits_layer) ) {
+	    map.removeLayer(fits_layer)
+	    map.addLayer(fits_layer)
+	}
+    })
+
+    
+    $("#checkbox_invert_color").click(function() {
+	INVERT_COLORS = ($("#checkbox_invert_color").prop('checked'))
+	if (map.hasLayer(fits_layer) ) {
+	    map.removeLayer(fits_layer)
+	    if (INVERT_COLORS == true) $("#map").css("background-color", "#ffffff")
+	    else $("#map").css("background-color", "#000000")
+
+	    map.addLayer(fits_layer)
+	}
+	
+    })
+    
+    if ( getQueryVariable('ra') && getQueryVariable('dec') ) {
+	goto_map_coordinate({"data": [[getQueryVariable('ra'), getQueryVariable('dec')]]});
+    }
+    
+
+});
+
+</script>
+</body>
+</html>
