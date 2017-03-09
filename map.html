@@ -173,7 +173,12 @@ $(function() {
            }
            return(false);
     }
-    
+
+    function log1000(val) {
+        log_1000 = 6.907755278982137 // faster than Math.log(1000)
+        return(Math.log(val)/log_1000)
+    }
+
     function long2tile(lon,zoom) { 
         coords = map.project(L.latLng(0,lon))
 	return (Math.floor(coords.x * Math.pow(2, MAX_ZOOM - zoom) / TILE_SIZE ) ); 
@@ -383,11 +388,11 @@ $(function() {
 	    var plot_maximum = $("#text_set_plot_maximum").val()*1
 	    if (isNaN(plot_minimum) || plot_minimum == "" ) plot_minimum =  $("#text_set_plot_minimum").attr("placeholder")*1
 	    if (isNaN(plot_maximum) || plot_maximum == "" ) plot_maximum =  $("#text_set_plot_maximum").attr("placeholder")*1
-            var normalize = 1/(Math.log(plot_maximum-plot_minimum))
+            var normalize = 1/(log1000(plot_maximum-plot_minimum))
             var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
             for (var x = 0; x<xdim; x++) {
                 for (var y = 0; y<ydim; y++) {
-		    var color_value = Math.log10((image.getPixel(arr, x, ydim-y-1)) - plot_minimum) * normalize * 255
+		    var color_value = log1000((image.getPixel(arr, x, ydim-y-1)) - plot_minimum) * normalize * 255
                     for (i = 0; i<3; i++) {
 			if (INVERT_COLORS) {
 			    image_data.data[x*4+y*(xdim*4) + i] = 255 - color_value
