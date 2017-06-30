@@ -1,6 +1,11 @@
-<html>
+<!doctype html>
+<html lang="de">
 <head>
-
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepS82 - A deep sky map of SDSS Stripe 82</title>
+    
+    
     <script src="./js/fits.js" type="text/javascript" charset="utf-8"></script>
     <script src="./js/wcs.js" type="text/javascript"></script>
     <script src="./js/leaflet.js"></script>
@@ -52,10 +57,35 @@
 
     <style type="text/css" media="screen">
 
+	body {
+	    padding: 0;
+	    margin: 0;
+	    background-color: #000000; 
+	}
+	
+	body, html {
+	    width: 100%;
+	    height: 100%;
+	    
+	}
+	
 	#map {
-            height: 100%;
+	    margin-right:5px;
+	    margin-left:5px;
+	    margin-top:5px;
+	    margin-bottom:5px;
+	    left:0;
+	    right:0;
+	    bottom:0;
+	    top:0;
+	    position:absolute;
             background-color: #000000; 
+
         }
+	
+	.leaflet-draw-tooltip, .leaflet-draw-tooltip-single {
+	    visibility: visible;
+	}
 <!--
 	.leaflet-draw-tooltip {
 		display: none;
@@ -147,6 +177,8 @@
     BASE_DIRECTORY = "./";
     HAS_NO_BACKGROUND = false;
     INVERT_COLORS = false
+    // this should be solved with a callback
+    cutoutSize=[0,0]
     //</global>
 
 
@@ -239,7 +271,39 @@
 
 	    return new L.LatLngBounds(sw, ne);
 	}
-    })
+    });
+    
+    L.Draw.Circle = L.Draw.Circle.extend({
+	_onMouseMove: function (e) {
+		var latlng = e.latlng,
+			showRadius = this.options.showRadius,
+			useMetric = this.options.metric,
+			radius;
+		
+		var screen_coordinates = map.project(e.latlng, map.getZoom());
+		if (this._isDrawing) {
+			this._drawShape(latlng);
+
+			radius = this._shape.getRadius();
+			cutoutSize=[2*radius, 2*radius];
+		}
+	}
+    });
+    
+    L.Draw.Rectangle = L.Draw.Rectangle.extend({
+	_onMouseMove: function (e) {
+		var latlng = e.latlng;
+
+		this._tooltip.updatePosition(latlng);
+		if (this._isDrawing) {
+			this._tooltip.updateContent(this._getTooltipText());
+			this._drawShape(latlng);
+			cutoutSize=[Math.abs(this._startLatLng.lat - latlng.lat), Math.abs(this._startLatLng.lng - latlng.lng)];
+
+		}
+
+	}
+    });
 
     //end helper functions
 
@@ -444,7 +508,7 @@
         return canvas;
     };
 
-
+    
     var map = new L.Map('map', {
 	    center: new L.latLng(10,10),
 	    minZoom: MIN_ZOOM,
@@ -455,6 +519,7 @@
     });
     
     map.panTo( new L.latLng( tile2lat(0,map.getZoom()), tile2long(0,map.getZoom()) ) );
+
 
 
     var overlayLayers = new Object();
@@ -475,6 +540,8 @@
     L.drawLocal.draw.toolbar.buttons.circle = 'Select a quadratic region for FITS export';
 
 
+    
+
    
     var selectorControl = new L.Control.Draw({
 	position: 'topleft',
@@ -487,7 +554,7 @@
 	    rectangle: { repeatMode: true },
 	    circle: { 
 		repeatMode: false,
-		showRadius: true
+		showRadius: false
 	    },
 	    marker: false
 	},
@@ -496,11 +563,20 @@
     
     map.addControl(selectorControl);
 
-    map.on('draw:created', function (e) {
+    map.on(L.Draw.Event.DRAWSTART, function(e) {
+	cutoutSizeControl.addTo(map);
+    });
 
+    map.on(L.Draw.Event.DRAWSTOP, function(e) {
+	cutoutSize=[0,0];
+	cutoutSizeControl.remove();
+    });
+    
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+	cutoutSizeControl.remove();
 	var type = e.layerType
 	var layer = e.layer
-
 	var fits_image_to_binary = function(args, config) {
 	    
 	    // Dirty Hack
@@ -619,7 +695,6 @@
 	    config.maxx = MIN_X;
 	    config.maxy = MIN_Y;
 	    var x, y, apoint;
-	    console.log(layer.getBounds());
 	    var selectionBounds = layer.getBounds();
 	    
 	    apoint = map.project(selectionBounds._southWest, MAX_ZOOM);
@@ -652,9 +727,6 @@
 	    
 	    config.x_offset = 0
 	    config.y_offset = 0
-	    	    
-	    console.log(config);
-	    
 	    var num_output_pixel = (config.maxy - config.miny) * (config.maxx - config.minx)
 	    config.fits_file_dest_buffer = new ArrayBuffer(2880 * 2 + Math.ceil(num_output_pixel * 4 / 2880) * 2880)
     
@@ -671,6 +743,8 @@
 
 	}
     });
+    
+
     
 
 //end the selectors
@@ -691,6 +765,8 @@
 	    .setContent(popup_string)
 	    .openOn(map);
     }
+
+   
 
     var mousePositionControl = new L.control.mousePosition({
         lngFormatter: function(lng) {
@@ -714,6 +790,27 @@
         lngFirst: true
     });
     mousePositionControl.addTo(map);
+    
+    var cutoutSizeControl = new L.control.mousePosition({
+	prefix: "Cutout size: ",
+	position: "topleft",
+	// use the lngFormatter to display the cutout size in pixels
+	lngFormatter: function(lng) {
+	    var coords = map.project(cutoutSize)
+	    return Math.abs(Math.round(coords.x)) + " by " + Math.abs(Math.round(coords.y)) + " px";
+	}, 
+	// use the lngFormatter to display the cutout size in arcsec
+	// 4553 pixels are equivalent to 0.5 degrees
+	// i. e. (0.5 * 3600 / 4453) = 0.3953437 arcsec/pixel
+	latFormatter: function(lat) {
+	    var coords = map.project(cutoutSize)
+	    var dim_x = coords.x * 0.3953437
+	    var dim_y = coords.y * 0.3953437
+	    return Math.abs(Math.round(dim_x)) + " by " + Math.abs(Math.round(dim_y)) + " arcsec"
+	}, 
+	lngFirst: true
+    });   
+    
     var sidebar = L.control.sidebar('sidebar').addTo(map);
     
     
@@ -792,6 +889,8 @@
     if ( getQueryVariable('ra') && getQueryVariable('dec') ) {
 	goto_map_coordinate({"data": [[getQueryVariable('ra'), getQueryVariable('dec')]]});
     }
+
+
     
 </script>
 </body>
