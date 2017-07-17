@@ -270,10 +270,10 @@
                 var td_ra = document.createElement('td');
                 var td_dec = document.createElement('td');
                 var tr = document.createElement('tr');
-                td_index.innerHTML = results.data[0].index
-                td_name.innerHTML = results.data[0].name;
-                td_ra.innerHTML = results.data[0].ra;
-                td_dec.innerHTML = results.data[0].dec;
+                td_index.innerHTML = results.data[0].index || '';
+                td_name.innerHTML = results.data[0].name || '';
+                td_ra.innerHTML = results.data[0].ra  || 'incorrect format';
+                td_dec.innerHTML = results.data[0].dec || 'incorrect format';
                 
                 tr.appendChild(td_index);
                 tr.appendChild(td_name);
