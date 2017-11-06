@@ -67,7 +67,7 @@
             width: 100%;
             height: 100%;
             counter-reset: object_counter;           /* Set the Serial counter to 0 */
-            
+
         }
 
         #map {
@@ -235,13 +235,13 @@
     //~ });
 
     //<global>
-    MAX_ZOOM = 13
-    MIN_ZOOM = 13
-    TILE_SIZE = 157
+    MAX_ZOOM = 14
+    MIN_ZOOM = 14
+    TILE_SIZE = 128
     MIN_X = 0;
     MIN_Y = MIN_X;
-    MAX_X = 220 * 29 - 1;
-    MAX_Y = MAX_X;
+    MAX_X = 8203;
+    MAX_Y = 186;
     PAGE_TITLE = "Stripe 82 Deep Image Coadd Map";
     BASE_DIRECTORY = "./";
     HAS_NO_BACKGROUND = false;
@@ -426,44 +426,48 @@
        between the pixels in the map and right ascension / declination
     */
     var map_coordinates = {
-    wcsheader: new Object(),
-    wcs: new wcs(),
-    relative_tile: {"x": -30, "y": -30}, // the wcs is relative to this tile
-    last_latLng: new L.latLng(0,0),
-    set_wcs: function(fits_header, tilePoint) {
+        wcsheader: new Object(),
+        wcs: new wcs(),
+        relative_tile: {"x": -30, "y": -30}, // the wcs is relative to this tile
+        last_latLng: new L.latLng(0,0),
+        set_wcs: function(fits_header, tilePoint) {
 
-        /* reset the wcs only if we have moved a considerable distance in the map
-           the original fits files were split into 29 by 29 tiles
-           this is where the 29 comes from
-        */
-        if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
-        this.wcsheader['SIMPLE'] = "T";
-        this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
-        this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
-        this.wcsheader['NAXIS1'] = fits_header.get('NAXIS1');
-        this.wcsheader['NAXIS2'] = fits_header.get('NAXIS2');
-        this.wcsheader['CTYPE1'] = fits_header.get('CTYPE1');
-        this.wcsheader['CTYPE2'] = fits_header.get('CTYPE2');
-        this.wcsheader['CRPIX1'] = fits_header.get('CRPIX1');
-        this.wcsheader['CRPIX2'] = fits_header.get('CRPIX2');
-        this.wcsheader['CRVAL1'] = fits_header.get('CRVAL1');
-        this.wcsheader['CRVAL2'] = fits_header.get('CRVAL2');
-        this.wcsheader['CDELT1'] = fits_header.get('CDELT1');
-        this.wcsheader['CDELT2'] = fits_header.get('CDELT2');
-        this.wcs.init(this.wcsheader);
-        this.relative_tile.x = tilePoint.x
-        this.relative_tile.y = tilePoint.y
+            /* reset the wcs only if we have moved a considerable distance in the map
+               the original fits files were split into 29 by 29 tiles
+               this is where the 29 comes from
+            */
+            if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
+                this.wcsheader['SIMPLE'] = "T";
+                this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
+                this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
+                this.wcsheader['NAXIS1'] = fits_header.get('NAXIS1');
+                this.wcsheader['NAXIS2'] = fits_header.get('NAXIS2');
+                this.wcsheader['CTYPE1'] = fits_header.get('CTYPE1');
+                this.wcsheader['CTYPE2'] = fits_header.get('CTYPE2');
+                this.wcsheader['CRPIX1'] = fits_header.get('CRPIX1');
+                this.wcsheader['CRPIX2'] = fits_header.get('CRPIX2');
+                this.wcsheader['CRVAL1'] = fits_header.get('CRVAL1');
+                this.wcsheader['CRVAL2'] = fits_header.get('CRVAL2');
+                //~ this.wcsheader['CDELT1'] = fits_header.get('CDELT1');
+                //~ this.wcsheader['CDELT2'] = fits_header.get('CDELT2');
+                this.wcsheader['CD1_1'] = fits_header.get('CD1_1');
+                this.wcsheader['CD1_2'] = fits_header.get('CD1_2');
+                this.wcsheader['CD2_1'] = fits_header.get('CD2_1');
+                this.wcsheader['CD2_2'] = fits_header.get('CD2_2');
+                this.wcs.init(this.wcsheader);
+                this.relative_tile.x = tilePoint.x
+                this.relative_tile.y = tilePoint.y
+            }
+
+        },
+        pix2sky: function(map_x, map_y) {
+            var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
+            var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
+            var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
+            var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
+            var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
+            return sky_coordinates
         }
-
-    },
-    pix2sky: function(map_x, map_y) {
-        var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
-        var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
-        var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
-        var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
-        var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
-        return sky_coordinates
-    }
 
     }
 
@@ -536,8 +540,12 @@
         wcsheader['CRPIX2'] = header.get('CRPIX2');
         wcsheader['CRVAL1'] = header.get('CRVAL1');
         wcsheader['CRVAL2'] = header.get('CRVAL2');
-        wcsheader['CDELT1'] = header.get('CDELT1');
-        wcsheader['CDELT2'] = header.get('CDELT2');
+        //~ wcsheader['CDELT1'] = header.get('CDELT1');
+        //~ wcsheader['CDELT2'] = header.get('CDELT2');
+        wcsheader['CD1_1'] = header.get('CD1_1');
+        wcsheader['CD1_2'] = header.get('CD1_2');
+        wcsheader['CD2_1'] = header.get('CD2_1');
+        wcsheader['CD2_2'] = header.get('CD2_2');
 
         var w = new wcs();
         w.init(wcsheader);
@@ -565,7 +573,6 @@
         var xdim=header.get('NAXIS1');
         var ydim=header.get('NAXIS2');
         map_coordinates.set_wcs(header, tilePoint)
-
         var hdu = this.getHDU(1);
         var dataunit = hdu.data;
         var image = this.getDataUnit();
@@ -580,7 +587,10 @@
             var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
             for (var x = 0; x<xdim; x++) {
                 for (var y = 0; y<ydim; y++) {
-                    var color_value = log1000((image.getPixel(arr, x, ydim-y-1)) - plot_minimum) * normalize * 255
+		    var pixel_value = image.getPixel(arr, x, ydim-y-1)
+		    if (INVERT_COLORS && pixel_value < plot_minimum ) var color_value = 0
+		    else if (! INVERT_COLORS && pixel_value < plot_minimum ) var color_value = 0
+		    else var color_value = log1000(pixel_value - plot_minimum) * normalize * 255
                     for (i = 0; i<3; i++) {
                         if (INVERT_COLORS) {
                             image_data.data[x*4+y*(xdim*4) + i] = 255 - color_value
@@ -608,8 +618,8 @@
         var canvas = L.DomUtil.create('canvas', 'leaflet-tile');
         canvas.width = TILE_SIZE;
         canvas.height = TILE_SIZE;
-        if (tilePoint.x >= 0 && tilePoint.y >= 0 && tilePoint.x < 220 * 29 && tilePoint.y < 5 * 29 ) {
-            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +tilePoint.y + '/' + tilePoint.x + '-' + tilePoint.y +'.fits';
+        if (tilePoint.x >= 232 && tilePoint.y >= 2 && tilePoint.x < (MAX_X - 232)  && tilePoint.y < (MAX_Y ) ) {
+            var fits_url = BASE_DIRECTORY +'/tiles/' + tilePoint.x + '-' + tilePoint.y +'.fits';
             var fits = new FITS(fits_url, draw_fits_image, [canvas, tilePoint]);
         }
         return canvas;
@@ -625,7 +635,7 @@
         crs: L.CRS.Simple
     });
     
-    map.panTo( new L.latLng( tile2lat(0,map.getZoom()), tile2long(0,map.getZoom()) ) );
+    map.panTo( new L.latLng( tile2lat(3,map.getZoom()), tile2long(235,map.getZoom()) ) );
 
 
 
@@ -641,15 +651,11 @@
 
     var selectors = new L.FeatureGroup();
     map.addLayer(selectors);
-    
-    
+
+
     L.drawLocal.draw.toolbar.buttons.rectangle = 'Select a rectangular region for FITS export';
     L.drawLocal.draw.toolbar.buttons.circle = 'Select a quadratic region for FITS export';
 
-
-    
-
-   
     var selectorControl = new L.Control.Draw({
         position: 'topleft',
         edit: {
@@ -667,7 +673,7 @@
         },
         edit:false
     });
-    
+
     map.addControl(selectorControl);
 
     map.on(L.Draw.Event.DRAWSTART, function(e) {
@@ -678,14 +684,14 @@
         cutoutSize=[0,0];
         cutoutSizeControl.remove();
     });
-    
+
 
     map.on(L.Draw.Event.CREATED, function (e) {
         cutoutSizeControl.remove();
         var type = e.layerType
         var layer = e.layer
         var fits_image_to_binary = function(args, config) {
-            
+
             // Dirty Hack
             if (config.tile_x == config.tile_left && config.tile_y == config.tile_bottom) {
                 var header = this.getHeader();
@@ -713,12 +719,12 @@
                 }
                 var Uint8_dest_fits_header = new Uint8Array(config.fits_file_dest_buffer)
                 Uint8_dest_fits_header.set(new Uint8Array(fits_header_ascii))
-                
+
                 // fill rest of Header with with spaces
                 for (var i = fits_header_string.length; i < 2880 * 2; i++) {
                     Uint8_dest_fits_header[i] = " ".charCodeAt()
                 }
-                
+
                 // set END keyword at beginning of second header block
                 for (var i=0; i<3; i++) {
                     Uint8_dest_fits_header[3200 + i] = "END".charCodeAt(i)
@@ -770,7 +776,7 @@
                     var dec_center = Math.min(dec_lower, dec_upper) + 0.5* (Math.max(dec_upper, dec_lower) - Math.min(dec_upper, dec_lower));
                     var fits_filename = "RA_"+ ra_center.toFixed(4) + "-DEC_" + dec_center.toFixed(4) + ".fits";
                     }
-                    
+
                     // provide download
                     binary_to_file(config.fits_file_dest_buffer, fits_filename);
 
@@ -784,7 +790,7 @@
 
         var assemble_fits_data = function(config) {     
 
-            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' +config.tile_y+ '/' + config.tile_x + '-' + config.tile_y +'.fits';
+            var fits_url = BASE_DIRECTORY +'/tiles/' + config.tile_x + '-' + config.tile_y +'.fits';
             var fits = new FITS(fits_url, fits_image_to_binary, config);
 
         }
@@ -802,7 +808,7 @@
             config.maxy = MIN_Y;
             var x, y, apoint;
             var selectionBounds = layer.getBounds();
-            
+
             apoint = map.project(selectionBounds._southWest, MAX_ZOOM);
             if (apoint.x < config.minx) { config.minx = apoint.x };
             if (apoint.x >= config.maxx) { config.maxx = apoint.x };
@@ -812,7 +818,7 @@
             if (apoint.x < config.minx) { config.minx = apoint.x };
             if (apoint.x >= config.maxx) { config.maxx = apoint.x };
             if (apoint.y < config.miny) { config.miny = apoint.y };
-            if (apoint.y >= config.maxy) { config.maxy = apoint.y };	    
+            if (apoint.y >= config.maxy) { config.maxy = apoint.y };
 
             if (config.minx < MIN_X ) { config.minx = MIN_X };
             if (config.miny < MIN_Y ) { config.miny = MIN_Y };
@@ -822,22 +828,19 @@
             config.maxx = Math.ceil(config.maxx)
             config.maxy = Math.ceil(config.maxy)
 
-            
+
             config.tile_left = Math.floor(config.minx / TILE_SIZE);
             config.tile_top = Math.floor(config.miny / TILE_SIZE);
             config.tile_right = Math.floor(config.maxx / TILE_SIZE);
             config.tile_bottom = Math.floor(config.maxy / TILE_SIZE);
-            
             config.tile_y = config.tile_bottom
             config.tile_x = config.tile_left
-            
             config.x_offset = 0
             config.y_offset = 0
             var num_output_pixel = (config.maxy - config.miny) * (config.maxx - config.minx)
             config.fits_file_dest_buffer = new ArrayBuffer(2880 * 2 + Math.ceil(num_output_pixel * 4 / 2880) * 2880)
 
             assemble_fits_data(config)
-            
         }
 
         if (type === 'circle') {
@@ -849,9 +852,6 @@
 
         }
     });
-    
-
-    
 
 //end the selectors
 
@@ -872,7 +872,6 @@
             .openOn(map);
     }
 
-   
 
     var mousePositionControl = new L.control.mousePosition({
         lngFormatter: function(lng) {
@@ -896,7 +895,7 @@
         lngFirst: true
     });
     mousePositionControl.addTo(map);
-    
+
     var cutoutSizeControl = new L.control.mousePosition({
         prefix: "Cutout size: ",
         position: "topleft",
@@ -916,10 +915,9 @@
         }, 
         lngFirst: true
     });   
-    
+
     var sidebar = L.control.sidebar('sidebar').addTo(map);
-    
-    
+
     var goto_map_coordinate = function(radec) {
         if (radec.length != 2) {
             console.log("do nothing");
@@ -928,13 +926,13 @@
             var ra = 1 * radec[0] // multiply by one to make sure it's a number
             var dec = 1 * radec[1] // multiply by one to make sure it's a number
             var tile = ra_dec_to_tile(ra, dec);
-            var fits_url = BASE_DIRECTORY +'/splitfits4/map/' + tile.y + '/' + tile.x + '-' + tile.y +'.fits';
+            var fits_url = BASE_DIRECTORY + '/tiles/' + tile.x + '-' + tile.y +'.fits';
             var fits = new FITS(fits_url, pan_to_radec, {"radec": [ra, dec], "tile": tile});
-            
+
             //~ map.panTo( new L.latLng( tile2lat(xy_array.data[0][1],map.getZoom()), tile2long(xy_array.data[0][0],map.getZoom()) ) );
         }
     }
-    
+
     addEvent(
         document.querySelector('#button_goto_map_coordinate'),
         'click',
@@ -942,7 +940,7 @@
             goto_map_coordinate(Papa.parse(  document.querySelector('#input_goto_map_coordinate').value , {dynamicTyping: true}).data[0])
         }
     );
-    
+
     addEvent(
         document.querySelector('#goto_map_coordinate_input_form'),
         'keypress',
@@ -991,13 +989,11 @@
         }
     );
 
-    
+
     if ( getQueryVariable('ra') && getQueryVariable('dec') ) {
         goto_map_coordinate([getQueryVariable('ra'), getQueryVariable('dec')]);
     }
 
-
-    
 </script>
 </body>
 </html>
