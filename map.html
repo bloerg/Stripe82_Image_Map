@@ -235,8 +235,9 @@
     //~ });
 
     //<global>
-    MAX_ZOOM = 14
+    MAX_ZOOM = 21
     MIN_ZOOM = 14
+    ORIG_ZOOM = 14
     TILE_SIZE = 128
     MIN_X = 0;
     MIN_Y = MIN_X;
@@ -568,7 +569,6 @@
     */
     var draw_fits_image = function(args, [canvas, tilePoint]) {
         var canvas_ctx = canvas.getContext('2d');
-        
         var header = this.getHeader();
         var xdim=header.get('NAXIS1');
         var ydim=header.get('NAXIS2');
@@ -579,27 +579,44 @@
         
 
         image.getFrame(0, function(arr) {
-        var plot_minimum = document.querySelector('#text_set_plot_minimum').value*1.0
-        var plot_maximum = document.querySelector('#text_set_plot_maximum').value*1.0
-        if (isNaN(plot_minimum) || plot_minimum == "" ) plot_minimum =  document.querySelector('#text_set_plot_minimum').placeholder*1.0
-        if (isNaN(plot_maximum) || plot_maximum == "" ) plot_maximum =  document.querySelector('#text_set_plot_maximum').placeholder*1.0
+            var plot_minimum = document.querySelector('#text_set_plot_minimum').value*1.0
+            var plot_maximum = document.querySelector('#text_set_plot_maximum').value*1.0
+            if (isNaN(plot_minimum) || plot_minimum == "" ) plot_minimum =  document.querySelector('#text_set_plot_minimum').placeholder*1.0
+            if (isNaN(plot_maximum) || plot_maximum == "" ) plot_maximum =  document.querySelector('#text_set_plot_maximum').placeholder*1.0
             var normalize = 1/(log1000(plot_maximum-plot_minimum))
             var image_data = canvas_ctx.getImageData(0,0,canvas.width, canvas.height);
-            for (var x = 0; x<xdim; x++) {
-                for (var y = 0; y<ydim; y++) {
-		    var pixel_value = image.getPixel(arr, x, ydim-y-1)
-		    if (INVERT_COLORS && pixel_value < plot_minimum ) var color_value = 0
-		    else if (! INVERT_COLORS && pixel_value < plot_minimum ) var color_value = 0
-		    else var color_value = log1000(pixel_value - plot_minimum) * normalize * 255
-                    for (i = 0; i<3; i++) {
-                        if (INVERT_COLORS) {
-                            image_data.data[x*4+y*(xdim*4) + i] = 255 - color_value
+            var canvas_x, canvas_y, fits_x, fits_y; // x and y coordinates in reference frame of zoomed canvas and respective area in fits image
+            for (fits_x = TILE_SIZE / Math.pow(2, tilePoint.z - ORIG_ZOOM) * (tilePoint.x % Math.pow(2, tilePoint.z - ORIG_ZOOM)),
+                 canvas_x = 0; 
+                 fits_x < TILE_SIZE / Math.pow(2, tilePoint.z - ORIG_ZOOM) * (1 + tilePoint.x % Math.pow(2, tilePoint.z - ORIG_ZOOM)),
+                 canvas_x < TILE_SIZE; 
+                 fits_x++,
+                 canvas_x += Math.pow(2, tilePoint.z - ORIG_ZOOM)
+            ) {
+                for (fits_y = TILE_SIZE / Math.pow(2, tilePoint.z - ORIG_ZOOM) * (tilePoint.y % Math.pow(2, tilePoint.z - ORIG_ZOOM)),
+                     canvas_y = 0;
+                     fits_y < TILE_SIZE / Math.pow(2, tilePoint.z - ORIG_ZOOM) * (1 + tilePoint.y % Math.pow(2, tilePoint.z - ORIG_ZOOM)),
+                     canvas_y < TILE_SIZE;
+                     fits_y++,
+                     canvas_y += Math.pow(2, tilePoint.z - ORIG_ZOOM)
+                ) {
+                    var pixel_value = image.getPixel(arr, fits_x, ydim-fits_y-1)
+                    if (INVERT_COLORS && pixel_value < plot_minimum ) var color_value = 0
+                    else if (! INVERT_COLORS && pixel_value < plot_minimum ) var color_value = 0
+                    else var color_value = log1000(pixel_value - plot_minimum) * normalize * 255
+                    for (sub_x = canvas_x; sub_x < canvas_x + Math.pow(2, tilePoint.z - ORIG_ZOOM); sub_x++) {
+                        for (sub_y = canvas_y; sub_y < canvas_y + Math.pow(2, tilePoint.z - ORIG_ZOOM); sub_y++) {
+                            for (i = 0; i<3; i++) {
+                                if (INVERT_COLORS) {
+                                    image_data.data[sub_x*4+sub_y*(xdim*4) + i] = 255 - color_value
+                                }
+                                else {
+                                    image_data.data[sub_x*4+sub_y*(xdim*4) + i] = color_value
+                                }
+                                //alpha value
+                                image_data.data[sub_x*4+sub_y*(xdim*4) + 3] = 255
+                            }
                         }
-                        else {
-                            image_data.data[x*4+y*(xdim*4) + i] = color_value
-                        }
-                        //alpha value
-                        image_data.data[x*4+y*(xdim*4) + 3] = 255
                     }
                 }
             }
@@ -618,19 +635,19 @@
         var canvas = L.DomUtil.create('canvas', 'leaflet-tile');
         canvas.width = TILE_SIZE;
         canvas.height = TILE_SIZE;
-        if (tilePoint.x >= 232 && tilePoint.y >= 2 && tilePoint.x < (MAX_X - 232)  && tilePoint.y < (MAX_Y ) ) {
-            var fits_url = BASE_DIRECTORY +'/tiles/' + tilePoint.x + '-' + tilePoint.y +'.fits';
+//        if (tilePoint.x >= 232 && tilePoint.y >= 2 && tilePoint.x < (MAX_X - 232)  && tilePoint.y < (MAX_Y ) ) {
+            var fits_url = BASE_DIRECTORY +'/tiles/rdeep/' + ORIG_ZOOM + '/' + Math.floor(tilePoint.x/Math.pow(2, tilePoint.z - ORIG_ZOOM)) + '-' + Math.floor(tilePoint.y/Math.pow(2, tilePoint.z - ORIG_ZOOM)) +'.fits';
             var fits = new FITS(fits_url, draw_fits_image, [canvas, tilePoint]);
-        }
+//        }
         return canvas;
     };
 
     
     var map = new L.Map('map', {
-        center: new L.latLng(10,10),
+        center: new L.latLng(TILE_SIZE * 223, TILE_SIZE * 2),
         minZoom: MIN_ZOOM,
         maxZoom: MAX_ZOOM,
-        zoom: MAX_ZOOM,
+        zoom: ORIG_ZOOM,
         closePopupOnClick: true,
         crs: L.CRS.Simple
     });
@@ -790,7 +807,7 @@
 
         var assemble_fits_data = function(config) {     
 
-            var fits_url = BASE_DIRECTORY +'/tiles/' + config.tile_x + '-' + config.tile_y +'.fits';
+            var fits_url = BASE_DIRECTORY +'/tiles/rdeep/' + ORIG_ZOOM + '/' + config.tile_x + '-' + config.tile_y +'.fits';
             var fits = new FITS(fits_url, fits_image_to_binary, config);
 
         }
@@ -809,12 +826,12 @@
             var x, y, apoint;
             var selectionBounds = layer.getBounds();
 
-            apoint = map.project(selectionBounds._southWest, MAX_ZOOM);
+            apoint = map.project(selectionBounds._southWest, ORIG_ZOOM);
             if (apoint.x < config.minx) { config.minx = apoint.x };
             if (apoint.x >= config.maxx) { config.maxx = apoint.x };
             if (apoint.y < config.miny) { config.miny = apoint.y };
             if (apoint.y >= config.maxy) { config.maxy = apoint.y };
-            apoint = map.project(selectionBounds._northEast, MAX_ZOOM);
+            apoint = map.project(selectionBounds._northEast, ORIG_ZOOM);
             if (apoint.x < config.minx) { config.minx = apoint.x };
             if (apoint.x >= config.maxx) { config.maxx = apoint.x };
             if (apoint.y < config.miny) { config.miny = apoint.y };
@@ -926,7 +943,7 @@
             var ra = 1 * radec[0] // multiply by one to make sure it's a number
             var dec = 1 * radec[1] // multiply by one to make sure it's a number
             var tile = ra_dec_to_tile(ra, dec);
-            var fits_url = BASE_DIRECTORY + '/tiles/' + tile.x + '-' + tile.y +'.fits';
+            var fits_url = BASE_DIRECTORY + '/tiles/rdeep/' + ORIG_ZOOM + '/' + tile.x + '-' + tile.y +'.fits';
             var fits = new FITS(fits_url, pan_to_radec, {"radec": [ra, dec], "tile": tile});
 
             //~ map.panTo( new L.latLng( tile2lat(xy_array.data[0][1],map.getZoom()), tile2long(xy_array.data[0][0],map.getZoom()) ) );
