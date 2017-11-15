@@ -437,7 +437,8 @@
                the original fits files were split into 29 by 29 tiles
                this is where the 29 comes from
             */
-            if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
+            //if ( Math.abs(this.relative_tile.x - tilePoint.x) > 29 || Math.abs(this.relative_tile.y - tilePoint.y) > 29 ) {
+            if ((this.relative_tile.x < 0 || this.relative_tile<0) && tilePoint.x >= 0 && tilePoint.y >= 0 ) {
                 this.wcsheader['SIMPLE'] = "T";
                 this.wcsheader['BITPIX'] = fits_header.get('BITPIX');
                 this.wcsheader['NAXIS'] = fits_header.get('NAXIS');
@@ -462,10 +463,8 @@
 
         },
         pix2sky: function(map_x, map_y) {
-            var tile_x = Math.floor(map_x / TILE_SIZE) // x coordinate of the tile in the map
-            var tile_y = Math.floor(map_y / TILE_SIZE) // y coordinate of the tile in the map
-            var fits_x = map_x - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
-            var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y // y coordinate in the reference frame of the fits file
+            var fits_x = map_x / Math.pow(2, map.getZoom() - ORIG_ZOOM) - this.relative_tile.x * TILE_SIZE // x coordinate in the reference frame of the fits file
+            var fits_y = (this.relative_tile.y +1) * TILE_SIZE - map_y / Math.pow(2, map.getZoom() - ORIG_ZOOM) // y coordinate in the reference frame of the fits file
             var sky_coordinates = this.wcs.pix2sky(fits_x, fits_y)
             return sky_coordinates
         }
@@ -481,7 +480,7 @@
            and y refers to DEC going from top to bottom
            DEC goes from -1.25° to 1.25°
     */
-        
+        console.log(map_coordinates.wcs.sky2pix(ra,dec));
 
         if ( dec < 1.25 && dec > -1.25) {
             var y = Math.floor((dec + 1.25) / 0.5) + 1
